@@ -4,8 +4,8 @@ import platform
 import os
 import requests
 import logging
-from typing import Optional
-from app.core.config import OLLAMA_MODEL, OLLAMA_HOST, WINDOWS_OLLAMA_PATH
+from typing import Optional, List
+from app.core.config import OLLAMA_HOST, WINDOWS_OLLAMA_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +13,7 @@ class OllamaService:
     def __init__(self):
         self.process: Optional[subprocess.Popen] = None
         self.ready = False
+        self.current_model: Optional[str] = None
 
     def check_installation(self) -> bool:
         """Check if Ollama is installed locally."""
@@ -75,33 +76,54 @@ class OllamaService:
             self.ready = False
             logger.info("Stopped Ollama server")
 
-    def pull_model(self) -> None:
-        """Pull the Ollama model."""
-        logger.info("Pulling model...")
+    def pull_model(self, model_name: str) -> None:
+        """Pull a specific Ollama model."""
+        logger.info("Pulling model: %s", model_name)
         try:
             if platform.system() == 'Windows':
                 if os.path.exists(WINDOWS_OLLAMA_PATH):
-                    subprocess.run([WINDOWS_OLLAMA_PATH, 'pull', OLLAMA_MODEL], check=True)
+                    subprocess.run([WINDOWS_OLLAMA_PATH, 'pull', model_name], check=True)
                 else:
-                    subprocess.run(['ollama', 'pull', OLLAMA_MODEL], check=True)
+                    subprocess.run(['ollama', 'pull', model_name], check=True)
             else:
-                subprocess.run(['ollama', 'pull', OLLAMA_MODEL], check=True)
+                subprocess.run(['ollama', 'pull', model_name], check=True)
             logger.info("Model pulled successfully")
         except subprocess.CalledProcessError as e:
             logger.error("Failed to pull model: %s", str(e))
             raise Exception(f"Failed to pull model: {str(e)}")
 
+    def list_models(self) -> List[str]:
+        """List all available models."""
+        try:
+            response = requests.get(f'{OLLAMA_HOST}/api/tags')
+            if response.status_code == 200:
+                models = response.json().get('models', [])
+                return [model['name'] for model in models]
+            else:
+                raise Exception("Failed to get model list")
+        except Exception as e:
+            logger.error("Error listing models: %s", str(e))
+            raise
+
+    def set_current_model(self, model_name: str) -> None:
+        """Set the current model to use."""
+        self.current_model = model_name
+        logger.info("Set current model to: %s", model_name)
+
     def process_prompt(self, prompt: str) -> str:
-        """Process a prompt using the local Ollama instance."""
+        """Process a prompt using the current model."""
         if not self.ready:
             raise Exception("Ollama is not ready yet. Please try again in a few moments.")
+            
+        if not self.current_model:
+            raise Exception("No model selected. Please select a model first.")
             
         logger.info("Processing prompt: %s", prompt)
         
         try:
             # Prepare the API request
             api_request = {
-                "model": OLLAMA_MODEL,
+                "model": self.current_model,
                 "prompt": prompt,
                 "stream": False
             }

@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from app.core.logging import setup_logging
 from app.core.config import API_TITLE, API_VERSION, API_DESCRIPTION
 from app.core.dependencies import ollama_service
-from app.api.routes import prompts
+from app.api.routes import prompts, models
 import platform
 
 # Configure logging
@@ -17,9 +17,6 @@ async def lifespan(app: FastAPI):
     try:
         # Start Ollama server
         ollama_service.start_server()
-        
-        # Pull the model
-        ollama_service.pull_model()
         
     except Exception as e:
         logger.error("Failed to initialize Ollama: %s", str(e))
@@ -41,6 +38,7 @@ app = FastAPI(
 
 # Include routers
 app.include_router(prompts.router, prefix="/api", tags=["prompts"])
+app.include_router(models.router, prefix="/api", tags=["models"])
 
 # Add root endpoint directly to the app
 @app.get("/")
