@@ -4,16 +4,35 @@ import platform
 import os
 import requests
 import logging
-from typing import Optional, List
-from app.core.config import OLLAMA_HOST, WINDOWS_OLLAMA_PATH
+from typing import Optional, List, Dict
+from app.core.config import OLLAMA_HOST, WINDOWS_OLLAMA_PATH, MAX_RUNNING_MODELS, DEFAULT_MODELS
 
 logger = logging.getLogger(__name__)
+
+class ModelStatus:
+    def __init__(self, name: str, is_running: bool = False):
+        self.name = name
+        self.is_running = is_running
+        self.process: Optional[subprocess.Popen] = None
 
 class OllamaService:
     def __init__(self):
         self.process: Optional[subprocess.Popen] = None
         self.ready = False
-        self.current_model: Optional[str] = None
+        self.models: Dict[str, ModelStatus] = {}
+        self.max_running_models = MAX_RUNNING_MODELS
+        self._initialize_models()
+
+    def _initialize_models(self):
+        """Initialize default models during service startup."""
+        try:
+            for model_name in DEFAULT_MODELS:
+                if model_name not in self.models:
+                    self.models[model_name] = ModelStatus(model_name)
+                    logger.info("Initialized model: %s", model_name)
+        except Exception as e:
+            logger.error("Error initializing models: %s", str(e))
+            raise
 
     def check_installation(self) -> bool:
         """Check if Ollama is installed locally."""
@@ -92,7 +111,7 @@ class OllamaService:
             logger.error("Failed to pull model: %s", str(e))
             raise Exception(f"Failed to pull model: {str(e)}")
 
-    def list_models(self) -> List[str]:
+    def list_available_models(self) -> List[str]:
         """List all available models."""
         try:
             response = requests.get(f'{OLLAMA_HOST}/api/tags')
@@ -105,25 +124,46 @@ class OllamaService:
             logger.error("Error listing models: %s", str(e))
             raise
 
-    def set_current_model(self, model_name: str) -> None:
-        """Set the current model to use."""
-        self.current_model = model_name
-        logger.info("Set current model to: %s", model_name)
+    def list_running_models(self) -> List[Dict[str, bool]]:
+        """List all running models and their status."""
+        return [
+            {"name": name, "is_running": status.is_running}
+            for name, status in self.models.items()
+        ]
 
-    def process_prompt(self, prompt: str) -> str:
-        """Process a prompt using the current model."""
+    def add_running_model(self, model_name: str) -> None:
+        """Add a model to the running models list."""
+        if len([m for m in self.models.values() if m.is_running]) >= self.max_running_models:
+            raise Exception(f"Maximum number of running models ({self.max_running_models}) reached")
+        
+        if model_name not in self.models:
+            self.models[model_name] = ModelStatus(model_name)
+        
+        self.models[model_name].is_running = True
+        logger.info("Added running model: %s", model_name)
+
+    def remove_running_model(self, model_name: str) -> None:
+        """Remove a model from the running models list."""
+        if model_name in self.models:
+            self.models[model_name].is_running = False
+            logger.info("Removed running model: %s", model_name)
+        else:
+            raise Exception(f"Model {model_name} not found in running models")
+
+    def process_prompt(self, prompt: str, model_name: str) -> str:
+        """Process a prompt using a specific model."""
         if not self.ready:
             raise Exception("Ollama is not ready yet. Please try again in a few moments.")
             
-        if not self.current_model:
-            raise Exception("No model selected. Please select a model first.")
+        if model_name not in self.models or not self.models[model_name].is_running:
+            raise Exception(f"Model {model_name} is not running")
             
-        logger.info("Processing prompt: %s", prompt)
+        logger.info("Processing prompt with model %s: %s", model_name, prompt)
         
         try:
             # Prepare the API request
             api_request = {
-                "model": self.current_model,
+                "model": model_name,
                 "prompt": prompt,
                 "stream": False
             }

@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 class ModelRequest(BaseModel):
     model_name: str
@@ -10,4 +10,10 @@ class ModelResponse(BaseModel):
 
 class ModelsListResponse(BaseModel):
     models: List[str]
-    current_model: Optional[str] = None 
+
+class RunningModelStatus(BaseModel):
+    name: str
+    is_running: bool
+
+class RunningModelsResponse(BaseModel):
+    running_models: List[RunningModelStatus] 
