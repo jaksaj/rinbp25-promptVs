@@ -1,11 +1,5 @@
 import uvicorn
-import logging
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+from app.main import app
 
 if __name__ == "__main__":
     uvicorn.run(
