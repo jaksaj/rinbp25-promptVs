@@ -1,53 +1,52 @@
-from fastapi import FastAPI
-from contextlib import asynccontextmanager
-from app.core.logging import setup_logging
-from app.core.config import API_TITLE, API_VERSION, API_DESCRIPTION
-from app.core.dependencies import ollama_service
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import prompts, models
-import platform
+from app.core.dependencies import get_ollama_service
+from app.services.ollama import OllamaService
+from app.core.config import API_TITLE, API_VERSION, API_DESCRIPTION
+import logging
 
 # Configure logging
-logger = setup_logging()
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup
-    logger.info("Starting up PromptVs API...")
-    
-    try:
-        # Start Ollama server
-        ollama_service.start_server()
-        
-    except Exception as e:
-        logger.error("Failed to initialize Ollama: %s", str(e))
-        ollama_service.stop_server()
-        raise
-    
-    yield
-    
-    # Shutdown
-    logger.info("Shutting down PromptVs API...")
-    ollama_service.stop_server()
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title=API_TITLE,
     version=API_VERSION,
-    description=API_DESCRIPTION,
-    lifespan=lifespan
+    description=API_DESCRIPTION
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Include routers
-app.include_router(prompts.router, prefix="/api", tags=["prompts"])
-app.include_router(models.router, prefix="/api", tags=["models"])
+app.include_router(prompts.router, prefix="/api")
+app.include_router(models.router, prefix="/api")
 
-# Add root endpoint directly to the app
 @app.get("/")
 async def root():
-    """Get the status of the API and Ollama."""
-    status = "ready" if ollama_service.ready else "initializing"
-    return {
-        "message": f"Welcome to {API_TITLE}",
-        "status": status,
-        "ollama_installed": ollama_service.check_installation(),
-        "system": platform.system()
-    } 
+    """Root endpoint that returns the API status."""
+    ollama_service = get_ollama_service()
+    if ollama_service.check_installation():
+        return {"message": "API is running", "status": "ready"}
+    else:
+        return {"message": "API is running but Ollama is not installed", "status": "not_ready"}
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on startup."""
+    try:
+        ollama_service = get_ollama_service()
+        if not ollama_service.check_installation():
+            logger.error("Ollama is not installed. Please install Ollama first.")
+        else:
+            logger.info("Ollama is installed and ready")
+    except Exception as e:
+        logger.error("Error during startup: %s", str(e))
+        raise 
