@@ -70,9 +70,34 @@ curl -X POST http://localhost:8000/api/models/stop \
 
 ### Process a Prompt with a Specific Model
 ```bash
-curl -X POST http://localhost:8000/api/prompt/deepseek-r1:1.5b \
+curl -X POST http://localhost:8000/api/single/deepseek-r1:1.5b \
   -H "Content-Type: application/json" \
   -d '{"prompt": "What is the capital of France?"}'
+```
+
+### Process a Prompt with Multiple Models
+```bash
+curl -X POST http://localhost:8000/api/batch \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "What is the capital of France?",
+    "models": ["deepseek-r1:1.5b", "gemma3:1b"]
+  }'
+```
+Example response:
+```json
+{
+    "results": [
+        {
+            "model": "deepseek-r1:1.5b",
+            "response": "The capital of France is Paris..."
+        },
+        {
+            "model": "gemma3:1b",
+            "response": "Error: Model gemma3:1b is not running"
+        }
+    ]
+}
 ```
 
 ## Example Usage Flow
@@ -108,12 +133,22 @@ curl http://localhost:8000/api/models/running
 
 6. Process a prompt with the running model:
 ```bash
-curl -X POST http://localhost:8000/api/prompt/gemma3:1b \
+curl -X POST http://localhost:8000/api/single/gemma3:1b \
   -H "Content-Type: application/json" \
   -d '{"prompt": "What is the capital of France?"}'
 ```
 
-7. Stop the model when done:
+7. Or process a prompt with multiple models:
+```bash
+curl -X POST http://localhost:8000/api/batch \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "What is the capital of France?",
+    "models": ["deepseek-r1:1.5b", "gemma3:1b"]
+  }'
+```
+
+8. Stop the model when done:
 ```bash
 curl -X POST http://localhost:8000/api/models/stop \
   -H "Content-Type: application/json" \
@@ -129,4 +164,5 @@ curl -X POST http://localhost:8000/api/models/stop \
   - Too many models are running
   - A model is not running when trying to use it
   - A model is already being pulled/started/stopped
-- The `/models/status` endpoint provides detailed information about each model's state 
+- The `/models/status` endpoint provides detailed information about each model's state
+- The batch prompt endpoint will process the prompt for all specified models that are running and return error messages for those that are not 
