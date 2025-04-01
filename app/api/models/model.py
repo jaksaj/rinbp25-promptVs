@@ -4,9 +4,12 @@ from typing import List, Optional, Dict
 class ModelRequest(BaseModel):
     model_name: str
 
+class BatchModelRequest(BaseModel):
+    models: List[str]
+
 class ModelResponse(BaseModel):
     message: str
-    model_name: str | None = None
+    model_name: Optional[str] = None
 
 class ModelsListResponse(BaseModel):
     models: List[str]
