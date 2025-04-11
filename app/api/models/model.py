@@ -3,6 +3,10 @@ from typing import List, Optional, Dict
 
 class ModelRequest(BaseModel):
     model_name: str
+    
+    model_config = {
+        'protected_namespaces': ()
+    }
 
 class BatchModelRequest(BaseModel):
     models: List[str]
@@ -10,6 +14,10 @@ class BatchModelRequest(BaseModel):
 class ModelResponse(BaseModel):
     message: str
     model_name: Optional[str] = None
+    
+    model_config = {
+        'protected_namespaces': ()
+    }
 
 class ModelsListResponse(BaseModel):
     models: List[str]
@@ -25,4 +33,4 @@ class ModelStatusResponse(BaseModel):
     name: str
     is_pulled: bool
     is_running: bool
-    status_message: str 
+    status_message: str
