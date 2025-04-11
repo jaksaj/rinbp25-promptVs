@@ -23,4 +23,10 @@ DEFAULT_MODELS = [
 ]
 
 # Windows-specific paths
-WINDOWS_OLLAMA_PATH = r'C:\Users\JJ\AppData\Local\Programs\Ollama\ollama.exe' 
+WINDOWS_OLLAMA_PATH = r'C:\Users\JJ\AppData\Local\Programs\Ollama\ollama.exe'
+
+# Neo4j Settings
+NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+NEO4J_USERNAME = os.getenv("NEO4J_USERNAME", "neo4j")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "password")
+NEO4J_DATABASE = os.getenv("NEO4J_DATABASE", "neo4j")

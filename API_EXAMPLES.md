@@ -170,6 +170,200 @@ Example response:
 }
 ```
 
+## Prompt Versioning Endpoints (Neo4j)
+
+### Create a New Prompt
+```bash
+curl -X POST http://localhost:8000/api/prompts \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Capital Cities",
+    "description": "Prompts about capital cities",
+    "tags": ["geography", "cities"]
+  }'
+```
+Example response:
+```json
+{
+    "id": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+### Create a Prompt Version
+```bash
+curl -X POST http://localhost:8000/api/prompt-versions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt_id": "550e8400-e29b-41d4-a716-446655440000",
+    "content": "What is the capital of {country}?",
+    "version": "1.0"
+  }'
+```
+Example response:
+```json
+{
+    "id": "660e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+### Create a Derived Prompt Version
+```bash
+curl -X POST http://localhost:8000/api/prompt-versions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt_id": "550e8400-e29b-41d4-a716-446655440000",
+    "content": "What is the capital city of {country} and what is its population?",
+    "version": "1.1",
+    "derived_from": "660e8400-e29b-41d4-a716-446655440000"
+  }'
+```
+
+### Get Prompt Versions
+```bash
+curl http://localhost:8000/api/prompts/550e8400-e29b-41d4-a716-446655440000/versions
+```
+Example response:
+```json
+[
+    {
+        "id": "660e8400-e29b-41d4-a716-446655440000",
+        "content": "What is the capital of {country}?",
+        "version": "1.0",
+        "created_at": "2023-11-01T12:34:56.789Z",
+        "test_runs": 2
+    },
+    {
+        "id": "770e8400-e29b-41d4-a716-446655440000",
+        "content": "What is the capital city of {country} and what is its population?",
+        "version": "1.1",
+        "created_at": "2023-11-01T13:45:12.345Z",
+        "test_runs": 1
+    }
+]
+```
+
+### Create a Test Run
+```bash
+curl -X POST http://localhost:8000/api/test-runs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt_version_id": "660e8400-e29b-41d4-a716-446655440000",
+    "model_used": "deepseek-r1:1.5b",
+    "output": "The capital of France is Paris.",
+    "metrics": {
+      "latency_ms": 150,
+      "token_count": 8,
+      "token_per_second": 53.3,
+      "custom_scores": {
+        "relevance": 0.95,
+        "accuracy": 1.0
+      }
+    },
+    "input_params": {
+      "temperature": 0.7,
+      "country": "France"
+    }
+  }'
+```
+
+### Test a Prompt and Save Results
+```bash
+curl -X POST "http://localhost:8000/api/test-prompt-and-save?version_id=660e8400-e29b-41d4-a716-446655440000&model_name=deepseek-r1:1.5b&prompt=What%20is%20the%20capital%20of%20France?"
+```
+
+### Get Test Runs for a Prompt Version
+```bash
+curl http://localhost:8000/api/prompt-versions/660e8400-e29b-41d4-a716-446655440000/test-runs
+```
+Example response:
+```json
+[
+    {
+        "id": "880e8400-e29b-41d4-a716-446655440000",
+        "model_used": "deepseek-r1:1.5b",
+        "output": "The capital of France is Paris.",
+        "metrics": {
+            "latency_ms": 150,
+            "token_count": 8,
+            "token_per_second": 53.3,
+            "custom_scores": {
+                "relevance": 0.95,
+                "accuracy": 1.0
+            }
+        },
+        "created_at": "2023-11-01T14:22:33.456Z",
+        "input_params": {
+            "temperature": 0.7,
+            "country": "France"
+        }
+    }
+]
+```
+
+### Get a Prompt Version's Lineage
+```bash
+curl http://localhost:8000/api/prompt-versions/770e8400-e29b-41d4-a716-446655440000/lineage
+```
+Example response:
+```json
+[
+    {
+        "id": "660e8400-e29b-41d4-a716-446655440000",
+        "content": "What is the capital of {country}?",
+        "version": "1.0",
+        "created_at": "2023-11-01T12:34:56.789Z",
+        "depth": 1
+    }
+]
+```
+
+### Compare Test Runs
+```bash
+curl -X POST http://localhost:8000/api/compare-test-runs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "test_run_ids": [
+      "880e8400-e29b-41d4-a716-446655440000",
+      "990e8400-e29b-41d4-a716-446655440000"
+    ]
+  }'
+```
+
+### Search Test Runs
+```bash
+curl "http://localhost:8000/api/search-test-runs?query=Paris&model=deepseek-r1:1.5b"
+```
+Example response:
+```json
+[
+    {
+        "id": "880e8400-e29b-41d4-a716-446655440000",
+        "model_used": "deepseek-r1:1.5b",
+        "output": "The capital of France is Paris.",
+        "metrics": {
+            "latency_ms": 150,
+            "token_count": 8,
+            "token_per_second": 53.3,
+            "custom_scores": {
+                "relevance": 0.95,
+                "accuracy": 1.0
+            }
+        },
+        "created_at": "2023-11-01T14:22:33.456Z",
+        "prompt_version": {
+            "id": "660e8400-e29b-41d4-a716-446655440000",
+            "content": "What is the capital of {country}?",
+            "version": "1.0"
+        },
+        "input_params": {
+            "temperature": 0.7,
+            "country": "France"
+        },
+        "score": 0.87
+    }
+]
+```
+
 ## Example Usage Flow
 
 1. First, check the status of all models:
@@ -215,7 +409,39 @@ curl -X POST http://localhost:8000/api/batch \
   }'
 ```
 
-7. Stop multiple models when done:
+7. Create a prompt in Neo4j:
+```bash
+curl -X POST http://localhost:8000/api/prompts \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Geography Questions",
+    "description": "Prompts about geography",
+    "tags": ["geography", "education"]
+  }'
+```
+
+8. Create a prompt version:
+```bash
+curl -X POST http://localhost:8000/api/prompt-versions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt_id": "<PROMPT_ID>",
+    "content": "What is the capital of {country}?",
+    "version": "1.0"
+  }'
+```
+
+9. Test the prompt and save the results:
+```bash
+curl -X POST "http://localhost:8000/api/test-prompt-and-save?version_id=<VERSION_ID>&model_name=deepseek-r1:1.5b&prompt=What%20is%20the%20capital%20of%20France?"
+```
+
+10. Get the test results:
+```bash
+curl http://localhost:8000/api/prompt-versions/<VERSION_ID>/test-runs
+```
+
+11. Stop multiple models when done:
 ```bash
 curl -X POST http://localhost:8000/api/models/stop/batch \
   -H "Content-Type: application/json" \
@@ -235,4 +461,9 @@ curl -X POST http://localhost:8000/api/models/stop/batch \
   - A model is already being pulled/started/stopped
 - The `/models/status` endpoint provides detailed information about each model's state
 - The batch prompt endpoint will process the prompt for all specified models that are running and return error messages for those that are not
-- Batch operations (pull/start/stop) will process each model independently and return results for all models, even if some fail 
+- Batch operations (pull/start/stop) will process each model independently and return results for all models, even if some fail
+- The Neo4j integration provides:
+  - Prompt versioning and lineage tracking
+  - Test run storage with metrics
+  - Ability to compare different prompt versions
+  - Full-text search across test run results
