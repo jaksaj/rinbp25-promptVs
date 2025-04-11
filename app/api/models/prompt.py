@@ -133,3 +133,51 @@ class TestRunComparisonResponse(BaseModel):
     model_config = {
         'protected_namespaces': ()
     }
+
+# New models for batch operations
+
+class QuestionAnswer(BaseModel):
+    question: str
+    answer: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = {}
+
+class BatchQuestionImport(BaseModel):
+    questions: List[QuestionAnswer]
+    prompt_group_name: str
+    prompt_group_description: Optional[str] = "Imported questions batch"
+    tags: Optional[List[str]] = []
+
+class PromptVersionTemplate(BaseModel):
+    template: str
+    version_name: str
+    notes: Optional[str] = None
+    
+class BatchVersionCreate(BaseModel):
+    prompt_ids: List[str]
+    templates: List[PromptVersionTemplate]
+    
+class BatchTestRequest(BaseModel):
+    prompt_version_ids: List[str]
+    models: List[str]
+    
+class BatchTestResponse(BaseModel):
+    total_tests: int
+    completed: int
+    failed: int
+    test_run_ids: List[str]
+    batch_id: Optional[str] = None
+    
+class TestResultsSummary(BaseModel):
+    model: str
+    prompt_version: str
+    avg_latency_ms: float
+    avg_token_count: float
+    avg_tokens_per_second: float
+    total_tests: int
+    custom_metrics: Dict[str, float] = {}
+    
+class TestResultsAggregation(BaseModel):
+    summaries: List[TestResultsSummary]
+    best_performing_model: str
+    best_performing_version: str
+    comparison_metrics: Dict[str, Dict[str, float]] = {}
