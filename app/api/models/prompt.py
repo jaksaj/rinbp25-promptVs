@@ -5,7 +5,7 @@ from datetime import datetime
 class PromptRequest(BaseModel):
     prompt: str
 
-class PromptResponse(BaseModel):
+class SimplePromptResponse(BaseModel):
     result: str
 
 class BatchPromptRequest(BaseModel):

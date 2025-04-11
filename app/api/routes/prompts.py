@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
-from app.api.models.prompt import PromptRequest, PromptResponse, BatchPromptRequest, BatchPromptResponse, ModelPromptResponse
+from app.api.models.prompt import PromptRequest, SimplePromptResponse, BatchPromptRequest, BatchPromptResponse, ModelPromptResponse
 from app.api.models.model import ModelRequest
 from app.core.dependencies import get_ollama_service
 from app.services.ollama import OllamaService
@@ -44,7 +44,7 @@ async def process_batch_prompt(
         logger.error("Error processing batch prompt: %s", str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/single/{model_name}", response_model=PromptResponse)
+@router.post("/single/{model_name}", response_model=SimplePromptResponse)
 async def process_prompt(
     model_name: str,
     request: PromptRequest,
@@ -53,7 +53,7 @@ async def process_prompt(
     """Process a prompt using a specific model."""
     try:
         result = ollama_service.process_prompt(request.prompt, model_name)
-        return PromptResponse(result=result)
+        return SimplePromptResponse(result=result)
     except Exception as e:
         logger.error("Error processing prompt: %s", str(e))
-        raise HTTPException(status_code=500, detail=str(e)) 
+        raise HTTPException(status_code=500, detail=str(e))

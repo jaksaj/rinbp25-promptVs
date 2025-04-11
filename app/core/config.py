@@ -19,7 +19,9 @@ MAX_RUNNING_MODELS = 2  # Maximum number of models that can run simultaneously
 DEFAULT_MODELS = [
     "deepseek-r1:1.5b",
     "gemma3:1b",
-    "llama3.2:1b"
+    "llama3.2:1b",
+    "gemma3:4b",
+    "llama3.1:8b"
 ]
 
 # Windows-specific paths
