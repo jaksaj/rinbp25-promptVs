@@ -285,10 +285,10 @@ async def test_prompt_and_save(
             input_params=input_params
         )
         
-        # Save the test run in the background
-        background_tasks.add_task(neo4j_service.create_test_run, test_run)
+        # Save the test run and get the ID immediately instead of using a background task
+        test_run_id = neo4j_service.create_test_run(test_run)
         
-        return {"result": result}
+        return {"result": result, "run_id": test_run_id}
     except HTTPException:
         raise
     except Exception as e:

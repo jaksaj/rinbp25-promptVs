@@ -49,6 +49,7 @@ class PromptCreate(BaseModel):
     content: str
     name: str
     description: str
+    expected_solution: Optional[str] = None
     tags: Optional[List[str]] = []
 
 class PromptResponse(BaseModel):
@@ -57,6 +58,7 @@ class PromptResponse(BaseModel):
     content: str
     name: str
     description: str
+    expected_solution: Optional[str] = None
     tags: List[str]
     created_at: datetime
     version_count: int = 0
@@ -65,6 +67,7 @@ class PromptVersionCreate(BaseModel):
     prompt_id: str
     content: str
     version: str
+    expected_solution: Optional[str] = None
     derived_from: Optional[str] = None
     notes: Optional[str] = None
 
@@ -73,6 +76,7 @@ class PromptVersionResponse(BaseModel):
     prompt_id: str
     content: str
     version: str
+    expected_solution: Optional[str] = None
     created_at: datetime
     test_runs_count: int = 0
     derived_from: Optional[str] = None

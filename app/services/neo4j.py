@@ -149,6 +149,7 @@ class Neo4jService:
                         name: $name,
                         description: $description,
                         content: $content,
+                        expected_solution: $expected_solution,
                         tags: $tags,
                         created_at: datetime()
                     })
@@ -159,6 +160,7 @@ class Neo4jService:
                     name=data.name,
                     description=data.description,
                     content=data.content,
+                    expected_solution=data.expected_solution,
                     tags=data.tags or []
                 )
                 record = result.single()
@@ -230,6 +232,7 @@ class Neo4jService:
                         id: randomUUID(),
                         content: $content,
                         version: $version,
+                        expected_solution: $expected_solution,
                         notes: $notes,
                         created_at: datetime()
                     })
@@ -245,6 +248,7 @@ class Neo4jService:
                     prompt_id=data.prompt_id,
                     content=data.content,
                     version=data.version,
+                    expected_solution=data.expected_solution,
                     notes=data.notes,
                     derived_from=data.derived_from
                 )
@@ -411,6 +415,7 @@ class Neo4jService:
                             id: pv.id,
                             content: pv.content,
                             version: pv.version,
+                            expected_solution: pv.expected_solution,
                             prompt: {
                                 id: p.id,
                                 name: p.name
@@ -462,6 +467,7 @@ class Neo4jService:
                             id: pv.id,
                             content: pv.content,
                             version: pv.version,
+                            expected_solution: pv.expected_solution,
                             prompt: {{
                                 id: p.id,
                                 name: p.name
