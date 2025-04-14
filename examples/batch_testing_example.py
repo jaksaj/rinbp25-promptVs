@@ -210,6 +210,145 @@ def format_batch_results(results: Dict[str, Any]) -> None:
         print(f"    Tests: {summary['total_tests']}")
         print()
 
+def evaluate_test_runs(batch_id: str, evaluation_model: str = "gemma3:4b") -> Dict[str, Any]:
+    """
+    Evaluate the test runs using an evaluation model.
+    
+    Args:
+        batch_id: The ID of the batch test run
+        evaluation_model: The model to use for evaluation
+        
+    Returns:
+        Evaluation results summary
+    """
+    # First get all test runs from the batch
+    test_runs_response = requests.get(f"{BASE_URL}/batch/export-results/{batch_id}?format=json")
+    test_runs_response.raise_for_status()
+    test_runs = test_runs_response.json()
+    
+    # Extract test run IDs
+    test_run_ids = []
+    for test_run in test_runs:
+        if "run_id" in test_run:
+            test_run_ids.append(test_run["run_id"])
+    
+    if not test_run_ids:
+        print("No test run IDs found in batch results. Cannot perform evaluation.")
+        return {}
+    
+    print(f"\nEvaluating {len(test_run_ids)} test runs using model: {evaluation_model}")
+    
+    # Use batch evaluation endpoint to process all test runs
+    evaluation_response = requests.post(
+        f"{BASE_URL}/evaluation/batch",
+        json={
+            "test_run_ids": test_run_ids,
+            "evaluation_model": evaluation_model,
+            "detailed_metrics": True
+        }
+    )
+    evaluation_response.raise_for_status()
+    evaluation_results = evaluation_response.json()
+    
+    # Parse and return evaluation results
+    results = evaluation_results.get("results", [])
+    avg_score = evaluation_results.get("average_score", 0.0)
+    
+    print(f"Evaluation complete. Average score: {avg_score:.3f}")
+    
+    # Group results by model and prompt version for better analysis
+    grouped_results = {}
+    for result in results:
+        # Get the model and prompt version from the test run
+        test_run_id = result.get("test_run_id")
+        if not test_run_id:
+            continue
+            
+        # Find the corresponding test run
+        for test_run in test_runs:
+            if test_run.get("run_id") == test_run_id:
+                model = test_run.get("model", "unknown")
+                prompt_version = test_run.get("version", "unknown")
+                
+                key = f"{model}_{prompt_version}"
+                if key not in grouped_results:
+                    grouped_results[key] = {
+                        "model": model,
+                        "prompt_version": prompt_version,
+                        "scores": [],
+                        "accuracy": [],
+                        "relevance": [],
+                        "completeness": [],
+                        "conciseness": [],
+                        "count": 0
+                    }
+                
+                # Add metrics
+                grouped_results[key]["scores"].append(result.get("overall_score", 0.0))
+                grouped_results[key]["accuracy"].append(result.get("accuracy", 0.0))
+                
+                # Add optional detailed metrics if available
+                for metric in ["relevance", "completeness", "conciseness"]:
+                    if result.get(metric) is not None:
+                        grouped_results[key][metric].append(result.get(metric, 0.0))
+                
+                grouped_results[key]["count"] += 1
+                break
+    
+    # Calculate averages for each group
+    summary = []
+    for key, data in grouped_results.items():
+        avg_score = sum(data["scores"]) / len(data["scores"]) if data["scores"] else 0.0
+        avg_accuracy = sum(data["accuracy"]) / len(data["accuracy"]) if data["accuracy"] else 0.0
+        
+        metrics = {
+            "model": data["model"],
+            "prompt_version": data["prompt_version"],
+            "avg_score": avg_score,
+            "avg_accuracy": avg_accuracy,
+            "count": data["count"]
+        }
+        
+        # Add detailed metrics if available
+        for metric in ["relevance", "completeness", "conciseness"]:
+            if data[metric]:
+                metrics[f"avg_{metric}"] = sum(data[metric]) / len(data[metric])
+        
+        summary.append(metrics)
+    
+    # Sort by average score (descending)
+    summary.sort(key=lambda x: x["avg_score"], reverse=True)
+    
+    # Print summary table
+    if summary:
+        print("\n===== EVALUATION SUMMARY =====")
+        headers = ["Model", "Prompt Version", "Avg Score", "Avg Accuracy", "Count"]
+        table_data = [
+            [
+                item["model"],
+                item["prompt_version"],
+                f"{item['avg_score']:.3f}",
+                f"{item['avg_accuracy']:.3f}",
+                item["count"]
+            ]
+            for item in summary
+        ]
+        
+        print("\n" + "\n".join(
+            ["\t".join(headers)] + 
+            ["\t".join(row) for row in table_data]
+        ))
+        
+        # Identify best performing combination
+        best = summary[0]
+        print(f"\nBest performing combination: {best['model']} with {best['prompt_version']} (Score: {best['avg_score']:.3f})")
+    
+    return {
+        "summary": summary,
+        "average_score": avg_score,
+        "total_evaluations": len(results)
+    }
+
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Run batch testing for multiple questions with different models')
     parser.add_argument('--csv', type=str, help='CSV file with questions and answers')
@@ -284,6 +423,11 @@ def main():
     
     # Step 6: Export results
     export_results(batch_id, format=args.format, output_file=args.output)
+    
+    # Step 7: Evaluate test runs
+    print("\nEvaluating test runs...")
+    evaluation_results = evaluate_test_runs(batch_id)
+    print(f"Evaluation summary: {evaluation_results}")
 
 if __name__ == "__main__":
     main()

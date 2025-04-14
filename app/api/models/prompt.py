@@ -262,3 +262,35 @@ class BatchVariationResult(BaseModel):
 class BatchGenerateVariationsResponse(BaseModel):
     results: List[BatchVariationResult]
     total_variations: int
+
+# Revised models for evaluation results
+
+class TestRunEvaluationRequest(BaseModel):
+    test_run_id: str
+    model: Optional[str] = None
+
+class EvaluationResponse(BaseModel):
+    id: str
+    question: str
+    expected_answer: str
+    actual_answer: str
+    accuracy: float
+    relevance: Optional[float] = None
+    completeness: Optional[float] = None
+    conciseness: Optional[float] = None
+    overall_score: float
+    explanation: str
+    created_at: datetime
+    model: Optional[str] = None
+    prompt_version_id: Optional[str] = None
+    test_run_id: str
+
+class BatchEvaluationRequest(BaseModel):
+    test_run_ids: List[str]
+    evaluation_model: Optional[str] = None
+    detailed_metrics: bool = False
+
+class BatchEvaluationResponse(BaseModel):
+    results: List[EvaluationResponse]
+    total_evaluations: int
+    average_score: float

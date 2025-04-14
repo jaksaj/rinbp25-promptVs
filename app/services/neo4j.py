@@ -2,7 +2,7 @@ from neo4j import GraphDatabase
 from typing import Dict, List, Any, Optional
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from neo4j.time import DateTime as Neo4jDateTime
 from app.core.config import (
     NEO4J_URI, 
@@ -11,6 +11,7 @@ from app.core.config import (
     NEO4J_DATABASE
 )
 import json
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -378,6 +379,72 @@ class Neo4jService:
             logger.error(f"Error getting test runs: {str(e)}")
             raise
             
+    def get_test_run(self, test_run_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get a specific test run by ID.
+        
+        Args:
+            test_run_id: ID of the test run to retrieve
+            
+        Returns:
+            Test run data or None if not found
+        """
+        try:
+            with self.driver.session(database=NEO4J_DATABASE) as session:
+                result = session.run(
+                    """
+                    MATCH (tr:TestRun {id: $test_run_id})
+                    MATCH (tr)-[:TESTED_WITH]->(pv:PromptVersion)
+                    RETURN tr {
+                        .*,
+                        prompt_version_id: pv.id
+                    } as test_run
+                    """,
+                    test_run_id=test_run_id
+                )
+                record = result.single()
+                if record:
+                    test_run = self._convert_neo4j_values(record["test_run"])
+                    
+                    # Parse JSON strings back into dictionaries
+                    if 'metrics_json' in test_run:
+                        test_run['metrics'] = json.loads(test_run['metrics_json'])
+                        del test_run['metrics_json']
+                    if 'input_params_json' in test_run:
+                        test_run['input_params'] = json.loads(test_run['input_params_json'])
+                        del test_run['input_params_json']
+                    
+                    return test_run
+                return None
+        except Exception as e:
+            logger.error(f"Error getting test run: {str(e)}")
+            raise
+    
+    def get_evaluations_for_test_run(self, test_run_id: str) -> List[Dict[str, Any]]:
+        """
+        Get all evaluations for a specific test run.
+        
+        Args:
+            test_run_id: ID of the test run
+            
+        Returns:
+            List of evaluation results
+        """
+        try:
+            with self.driver.session(database=NEO4J_DATABASE) as session:
+                query = """
+                MATCH (e:EvaluationResult)-[:EVALUATES_RUN]->(tr:TestRun {id: $tr_id})
+                RETURN e
+                ORDER BY e.created_at DESC
+                """
+                
+                result = session.run(query, tr_id=test_run_id)
+                evaluations = [dict(record["e"].items()) for record in result]
+                return self._convert_neo4j_values(evaluations)
+        except Exception as e:
+            logger.error(f"Error getting evaluations for test run: {str(e)}")
+            raise
+            
     def get_prompt_lineage(self, prompt_version_id: str) -> List[Dict]:
         """Get the full lineage (ancestry) of a prompt version."""
         try:
@@ -516,4 +583,126 @@ class Neo4jService:
                 logger.info("Successfully created Neo4j indexes and constraints")
         except Exception as e:
             logger.error(f"Error creating Neo4j indexes: {str(e)}")
+            raise
+
+    # Evaluation methods
+    def create_evaluation_result(self, evaluation_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Save an evaluation result and link it to the related prompt version and test run if provided.
+        
+        Args:
+            evaluation_data: Dictionary containing evaluation result data
+            
+        Returns:
+            The created evaluation result with ID and timestamp
+        """
+        try:
+            # Generate an ID for the evaluation
+            eval_id = str(uuid.uuid4())
+            current_time = datetime.now(timezone.utc).isoformat()
+            
+            # Prepare the evaluation node data
+            eval_properties = {
+                "id": eval_id,
+                "question": evaluation_data.get("question"),
+                "expected_answer": evaluation_data.get("expected_answer"),
+                "actual_answer": evaluation_data.get("actual_answer"),
+                "accuracy": evaluation_data.get("accuracy", 0.0),
+                "relevance": evaluation_data.get("relevance"),
+                "completeness": evaluation_data.get("completeness"),
+                "conciseness": evaluation_data.get("conciseness"),
+                "overall_score": evaluation_data.get("overall_score", 0.0),
+                "explanation": evaluation_data.get("explanation", ""),
+                "created_at": current_time,
+                "model": evaluation_data.get("model"),
+                "version": evaluation_data.get("version"),
+            }
+            
+            # Use self.driver.session() instead of self.session
+            with self.driver.session(database=NEO4J_DATABASE) as session:
+                # Create the evaluation node
+                query = """
+                CREATE (e:EvaluationResult $properties)
+                RETURN e
+                """
+                
+                result = session.run(query, properties=eval_properties)
+                eval_node = result.single()
+                
+                # Link to prompt version if provided
+                prompt_version_id = evaluation_data.get("prompt_version_id")
+                if prompt_version_id:
+                    link_query = """
+                    MATCH (e:EvaluationResult {id: $eval_id})
+                    MATCH (pv:PromptVersion {id: $pv_id})
+                    CREATE (e)-[:EVALUATES]->(pv)
+                    RETURN e, pv
+                    """
+                    session.run(link_query, eval_id=eval_id, pv_id=prompt_version_id)
+                
+                # Link to test run if provided
+                test_run_id = evaluation_data.get("test_run_id")
+                if test_run_id:
+                    link_run_query = """
+                    MATCH (e:EvaluationResult {id: $eval_id})
+                    MATCH (tr:TestRun {id: $tr_id})
+                    CREATE (e)-[:EVALUATES_RUN]->(tr)
+                    RETURN e, tr
+                    """
+                    session.run(link_run_query, eval_id=eval_id, tr_id=test_run_id)
+                
+                return {**eval_properties}
+        except Exception as e:
+            logger.error(f"Error creating evaluation result: {str(e)}")
+            raise
+    
+    def get_evaluations_for_prompt_version(self, prompt_version_id: str) -> List[Dict[str, Any]]:
+        """
+        Get all evaluations for a specific prompt version.
+        
+        Args:
+            prompt_version_id: ID of the prompt version
+            
+        Returns:
+            List of evaluation results
+        """
+        try:
+            with self.driver.session(database=NEO4J_DATABASE) as session:
+                query = """
+                MATCH (e:EvaluationResult)-[:EVALUATES]->(pv:PromptVersion {id: $pv_id})
+                RETURN e
+                ORDER BY e.created_at DESC
+                """
+                
+                result = session.run(query, pv_id=prompt_version_id)
+                evaluations = [dict(record["e"].items()) for record in result]
+                return self._convert_neo4j_values(evaluations)
+        except Exception as e:
+            logger.error(f"Error getting evaluations for prompt version: {str(e)}")
+            raise
+    
+    def get_evaluation_by_id(self, evaluation_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get an evaluation result by ID.
+        
+        Args:
+            evaluation_id: ID of the evaluation to retrieve
+            
+        Returns:
+            Evaluation result or None if not found
+        """
+        try:
+            with self.driver.session(database=NEO4J_DATABASE) as session:
+                query = """
+                MATCH (e:EvaluationResult {id: $eval_id})
+                RETURN e
+                """
+                
+                result = session.run(query, eval_id=evaluation_id)
+                record = result.single()
+                if record:
+                    return self._convert_neo4j_values(dict(record["e"].items()))
+                return None
+        except Exception as e:
+            logger.error(f"Error getting evaluation by ID: {str(e)}")
             raise

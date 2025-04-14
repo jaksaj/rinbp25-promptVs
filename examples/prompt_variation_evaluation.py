@@ -307,56 +307,56 @@ def evaluate_test_results(batch_id: str, evaluator_model: str) -> List[Dict[str,
         response.raise_for_status()
         test_results = response.json()
         
-        # Prepare evaluations
-        evaluations = []
+        # Prepare test run IDs for evaluation
+        test_run_ids = []
         for result in test_results:
-            if result.get("expected_answer"):
-                evaluations.append({
-                    "question": result["question"],
-                    "expected_answer": result["expected_answer"],
-                    "actual_answer": result["response"],
-                    "model": result["model"],
-                    "version": result["version"]
-                })
-        
-        if not evaluations:
-            print("No evaluations to perform (no test results with expected answers)")
+            if result.get("run_id"):
+                test_run_ids.append(result.get("run_id"))
+                
+        if not test_run_ids:
+            print("No test run IDs found in results. Cannot perform evaluation.")
             return []
             
-        print(f"\nEvaluating {len(evaluations)} test results using model: {evaluator_model}")
+        print(f"\nEvaluating {len(test_run_ids)} test runs using model: {evaluator_model}")
         
         # Call the evaluation API in batches to avoid overwhelming the server
         batch_size = 10
         all_evaluation_results = []
         
-        for i in range(0, len(evaluations), batch_size):
-            batch = evaluations[i:i+batch_size]
-            print(f"Evaluating batch {i//batch_size + 1}/{(len(evaluations) + batch_size - 1)//batch_size}")
+        for i in range(0, len(test_run_ids), batch_size):
+            batch = test_run_ids[i:i+batch_size]
+            print(f"Evaluating batch {i//batch_size + 1}/{(len(test_run_ids) + batch_size - 1)//batch_size}")
             
             try:
+                # Use the new batch evaluation endpoint that works with test run IDs
                 eval_response = requests.post(
                     f"{BASE_URL}/evaluation/batch",
                     json={
-                        "evaluations": batch,
+                        "test_run_ids": batch,
                         "evaluation_model": evaluator_model,
                         "detailed_metrics": True
                     }
                 )
                 eval_response.raise_for_status()
-                batch_results = eval_response.json()
+                batch_results = eval_response.json().get("results", [])
                 
-                # Ensure model and version information is preserved
-                for j, result in enumerate(batch_results):
-                    if j < len(batch):  # Safety check
-                        # Copy model and version info from the request to the result
-                        result["model"] = batch[j]["model"]
-                        result["version"] = batch[j]["version"]
-                
+                # Add results to our collection
                 all_evaluation_results.extend(batch_results)
             except Exception as e:
                 print(f"Error evaluating batch {i//batch_size + 1}: {str(e)}")
                 # Continue with next batch rather than failing completely
                 continue
+        
+        # For each result, look up corresponding test run details for model and version info
+        for result in all_evaluation_results:
+            test_run_id = result.get("test_run_id")
+            if test_run_id:
+                # Find matching test run in original results
+                for test_run in test_results:
+                    if test_run.get("run_id") == test_run_id:
+                        result["model"] = test_run.get("model", "unknown")
+                        result["version"] = test_run.get("version", "unknown")
+                        break
                 
         return all_evaluation_results
     except Exception as e:

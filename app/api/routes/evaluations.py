@@ -1,465 +1,297 @@
-from fastapi import APIRouter, HTTPException, Depends, Body
-from app.core.dependencies import get_ollama_service, get_neo4j_service
-from app.services.ollama import OllamaService
-from app.services.neo4j import Neo4jService
+from fastapi import APIRouter, Depends, HTTPException
+from typing import List, Dict, Any, Optional
 from app.services.evaluator import LLMEvaluator
-from typing import Dict, Any, List, Optional
-from pydantic import BaseModel
+from app.services.neo4j import Neo4jService
+from app.core.dependencies import get_ollama_service, get_neo4j_service
+from app.api.models.prompt import (
+    TestRunEvaluationRequest, 
+    EvaluationResponse, 
+    BatchEvaluationRequest, 
+    BatchEvaluationResponse
+)
+from datetime import datetime
+import uuid
 import logging
-import json
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/evaluation", tags=["evaluation"])
+router = APIRouter(prefix="/evaluation")  # Add the prefix here to match the client calls
 
-# Pydantic models for request/response validation
-class EvaluationRequest(BaseModel):
-    question: str
-    expected_answer: str
-    actual_answer: str
-    
-    model_config = {
-        'protected_namespaces': ()
-    }
-
-class BatchEvaluationRequest(BaseModel):
-    evaluations: List[EvaluationRequest]
-    evaluation_model: Optional[str] = "gemma3:4b"
-    detailed_metrics: Optional[bool] = False
-    
-    model_config = {
-        'protected_namespaces': ()
-    }
-
-class TestRunEvaluationRequest(BaseModel):
-    test_run_id: str
-    evaluation_model: Optional[str] = "gemma3:4b"
-    detailed_metrics: Optional[bool] = False
-    
-    model_config = {
-        'protected_namespaces': ()
-    }
-
-class CompareTestRunsRequest(BaseModel):
-    test_run_ids: List[str]
-    evaluation_model: Optional[str] = "gemma3:4b"
-    detailed_metrics: Optional[bool] = False
-    
-    model_config = {
-        'protected_namespaces': ()
-    }
-
-@router.post("/accuracy", response_model=Dict[str, Any])
-async def evaluate_accuracy(
-    request: EvaluationRequest,
-    evaluation_model: str = "gemma3:4b",
-    detailed_metrics: bool = False,
-    ollama_service: OllamaService = Depends(get_ollama_service)
-):
-    """
-    Evaluate the accuracy of an answer using a larger LLM model.
-    
-    This endpoint allows semantic evaluation rather than simple string matching.
-    """
-    try:
-        # First, check if the evaluation model is running
-        running_models = ollama_service.list_running_models()
-        running_model_names = [model.name for model in running_models]
-        if evaluation_model not in running_model_names:
-            raise HTTPException(status_code=400, detail=f"Evaluation model {evaluation_model} is not running")
-        
-        # Create the evaluator with the specified model
-        evaluator = LLMEvaluator(ollama_service, evaluation_model)
-        
-        # Run the evaluation
-        if detailed_metrics:
-            result = await evaluator.evaluate_response_metrics(
-                request.question,
-                request.expected_answer,
-                request.actual_answer
-            )
-        else:
-            result = await evaluator.evaluate_accuracy(
-                request.question,
-                request.expected_answer,
-                request.actual_answer
-            )
-        
-        return result
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error evaluating accuracy: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/batch", response_model=List[Dict[str, Any]])
-async def batch_evaluate(
-    request: BatchEvaluationRequest,
-    ollama_service: OllamaService = Depends(get_ollama_service)
-):
-    """
-    Batch evaluate multiple question-answer pairs using a larger LLM model.
-    """
-    try:
-        # First, check if the evaluation model is running
-        running_models = ollama_service.list_running_models()
-        running_model_names = [model.name for model in running_models]
-        if request.evaluation_model not in running_model_names:
-            raise HTTPException(status_code=400, detail=f"Evaluation model {request.evaluation_model} is not running")
-        
-        # Create the evaluator with the specified model
-        evaluator = LLMEvaluator(ollama_service, request.evaluation_model)
-        
-        # Process each evaluation
-        results = []
-        for eval_req in request.evaluations:
-            try:
-                if request.detailed_metrics:
-                    result = await evaluator.evaluate_response_metrics(
-                        eval_req.question,
-                        eval_req.expected_answer,
-                        eval_req.actual_answer
-                    )
-                else:
-                    result = await evaluator.evaluate_accuracy(
-                        eval_req.question,
-                        eval_req.expected_answer,
-                        eval_req.actual_answer
-                    )
-                
-                # Add the question and answer to the result for reference
-                result["question"] = eval_req.question
-                result["expected_answer"] = eval_req.expected_answer
-                result["actual_answer"] = eval_req.actual_answer
-                
-                results.append(result)
-            except Exception as e:
-                # Include error in results but continue with other evaluations
-                results.append({
-                    "question": eval_req.question,
-                    "expected_answer": eval_req.expected_answer,
-                    "actual_answer": eval_req.actual_answer,
-                    "error": str(e)
-                })
-        
-        return results
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in batch evaluation: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/test-run/{test_run_id}", response_model=Dict[str, Any])
+@router.post("/test-run", response_model=EvaluationResponse)
 async def evaluate_test_run(
-    test_run_id: str,
-    evaluation_model: str = "gemma3:4b",
-    detailed_metrics: bool = False,
-    ollama_service: OllamaService = Depends(get_ollama_service),
+    request: TestRunEvaluationRequest,
+    evaluation_model: Optional[str] = None,
+    ollama_service = Depends(get_ollama_service),
     neo4j_service: Neo4jService = Depends(get_neo4j_service)
 ):
     """
-    Evaluate a specific test run using a larger LLM model.
-    
-    This retrieves the test run data from Neo4j, evaluates it, and returns the results.
-    Optionally, it can update the test run with the evaluation results.
+    Evaluate a test run using the linked prompt version and prompt data.
     """
     try:
-        # First, check if the evaluation model is running
-        running_models = ollama_service.list_running_models()
-        running_model_names = [model.name for model in running_models]
-        if evaluation_model not in running_model_names:
-            raise HTTPException(status_code=400, detail=f"Evaluation model {evaluation_model} is not running")
+        # Get the test run details to extract output (actual answer) and prompt version ID
+        test_run = neo4j_service.get_test_run(request.test_run_id)
+        if not test_run:
+            raise HTTPException(status_code=404, detail=f"Test run with ID {request.test_run_id} not found")
         
-        # Get the test run from Neo4j
-        with neo4j_service.driver.session(database="neo4j") as session:
-            result = session.run(
-                """
-                MATCH (tr:TestRun {id: $test_run_id})-[:TESTED_WITH]->(pv:PromptVersion)
-                MATCH (pv)-[:VERSION_OF]->(p:Prompt)
-                RETURN tr.output as output, p.content as question, p.expected_solution as expected_answer
-                """,
-                test_run_id=test_run_id
-            )
-            record = result.single()
-            if not record:
-                raise HTTPException(status_code=404, detail=f"Test run with ID {test_run_id} not found")
-            
-            # Get data from the record
-            output = record["output"]
-            question = record["question"]
-            expected_answer = record["expected_answer"]
-            
-            # Check if we have the expected answer
-            if not expected_answer:
-                raise HTTPException(status_code=400, detail="No expected answer available for this test run")
+        # Get the prompt version details using the test run's prompt version ID
+        prompt_version_id = test_run.get("prompt_version_id")
+        prompt_version = neo4j_service.get_prompt_version(prompt_version_id)
+        if not prompt_version:
+            raise HTTPException(status_code=404, detail=f"Prompt version with ID {prompt_version_id} not found")
         
-        # Create the evaluator with the specified model
-        evaluator = LLMEvaluator(ollama_service, evaluation_model)
+        # Get the associated prompt to retrieve the expected solution if not in version
+        expected_solution = prompt_version.get("expected_solution")
+        if not expected_solution:
+            prompt_id = prompt_version.get("prompt_id")
+            if prompt_id:
+                prompt = neo4j_service.get_prompt(prompt_id)
+                expected_solution = prompt.get("expected_solution", "")
         
-        # Run the evaluation
-        if detailed_metrics:
-            evaluation_result = await evaluator.evaluate_response_metrics(
-                question,
-                expected_answer,
-                output
-            )
-        else:
-            evaluation_result = await evaluator.evaluate_accuracy(
-                question,
-                expected_answer,
-                output
-            )
+        # Create the evaluator with the Neo4j service for saving results
+        evaluator = LLMEvaluator(
+            ollama_service=ollama_service,
+            evaluation_model=evaluation_model or "gemma3:4b",
+            neo4j_service=neo4j_service
+        )
         
-        # Add the context to the result
-        evaluation_result["test_run_id"] = test_run_id
-        evaluation_result["question"] = question
-        evaluation_result["expected_answer"] = expected_answer
-        evaluation_result["actual_answer"] = output
+        # Evaluate the accuracy of the test run
+        result = await evaluator.evaluate_accuracy(
+            question=prompt_version.get("content", ""),
+            expected_answer=expected_solution or "",
+            actual_answer=test_run.get("output", ""),
+            prompt_version_id=prompt_version_id,
+            test_run_id=request.test_run_id,
+            model=request.model or test_run.get("model_used")
+        )
         
-        # Update the test run with the evaluation results
-        try:
-            with neo4j_service.driver.session(database="neo4j") as session:
-                # Store evaluation results as a JSON property
-                session.run(
-                    """
-                    MATCH (tr:TestRun {id: $test_run_id})
-                    SET tr.evaluation_json = $evaluation_json
-                    """,
-                    test_run_id=test_run_id,
-                    evaluation_json=json.dumps(evaluation_result)
-                )
-        except Exception as e:
-            logger.error(f"Failed to update test run with evaluation results: {str(e)}")
-            evaluation_result["update_status"] = "failed"
-        else:
-            evaluation_result["update_status"] = "success"
+        # Create a response with all fields
+        response = EvaluationResponse(
+            id=str(uuid.uuid4()),
+            question=prompt_version.get("content", ""),
+            expected_answer=expected_solution or "",
+            actual_answer=test_run.get("output", ""),
+            accuracy=result.get("score", 0.0),
+            overall_score=result.get("score", 0.0),
+            explanation=result.get("explanation", ""),
+            created_at=datetime.now(),
+            model=request.model or test_run.get("model_used"),
+            prompt_version_id=prompt_version_id,
+            test_run_id=request.test_run_id
+        )
         
-        return evaluation_result
+        return response
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error evaluating test run: {str(e)}")
+        logger.error(f"Error in evaluate_test_run: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/compare-test-runs", response_model=List[Dict[str, Any]])
-async def compare_test_runs_with_evaluation(
-    request: CompareTestRunsRequest,
-    ollama_service: OllamaService = Depends(get_ollama_service),
+@router.post("/metrics/test-run", response_model=EvaluationResponse)
+async def evaluate_test_run_metrics(
+    request: TestRunEvaluationRequest,
+    evaluation_model: Optional[str] = None,
+    ollama_service = Depends(get_ollama_service),
     neo4j_service: Neo4jService = Depends(get_neo4j_service)
 ):
     """
-    Compare multiple test runs with evaluation.
-    
-    This retrieves the test runs from Neo4j, evaluates them if they have expected answers,
-    and returns a comparison with evaluation results.
+    Evaluate multiple metrics of a test run using the linked prompt version and prompt data.
     """
     try:
-        # First, check if the evaluation model is running
-        running_models = ollama_service.list_running_models()
-        running_model_names = [model.name for model in running_models]
-        if request.evaluation_model not in running_model_names:
-            raise HTTPException(status_code=400, detail=f"Evaluation model {request.evaluation_model} is not running")
+        # Get the test run details to extract output (actual answer) and prompt version ID
+        test_run = neo4j_service.get_test_run(request.test_run_id)
+        if not test_run:
+            raise HTTPException(status_code=404, detail=f"Test run with ID {request.test_run_id} not found")
         
-        # Create the evaluator
-        evaluator = LLMEvaluator(ollama_service, request.evaluation_model)
+        # Get the prompt version details using the test run's prompt version ID
+        prompt_version_id = test_run.get("prompt_version_id")
+        prompt_version = neo4j_service.get_prompt_version(prompt_version_id)
+        if not prompt_version:
+            raise HTTPException(status_code=404, detail=f"Prompt version with ID {prompt_version_id} not found")
         
-        # Get the test runs from Neo4j
-        with neo4j_service.driver.session(database="neo4j") as session:
-            result = session.run(
-                """
-                MATCH (tr:TestRun)
-                WHERE tr.id IN $test_run_ids
-                MATCH (tr)-[:TESTED_WITH]->(pv:PromptVersion)
-                MATCH (pv)-[:VERSION_OF]->(p:Prompt)
-                RETURN tr.id as test_run_id, tr.output as output, tr.model_used as model,
-                       p.content as question, p.expected_solution as expected_answer,
-                       tr.metrics_json as metrics_json, tr.evaluation_json as evaluation_json
-                """,
-                test_run_ids=request.test_run_ids
-            )
-            
-            test_runs = []
-            for record in result:
-                test_run = {
-                    "test_run_id": record["test_run_id"],
-                    "output": record["output"],
-                    "model": record["model"],
-                    "question": record["question"],
-                    "expected_answer": record["expected_answer"],
-                    "metrics": json.loads(record["metrics_json"]) if record["metrics_json"] else {},
-                }
-                
-                # If we already have an evaluation, use it
-                if record["evaluation_json"]:
-                    test_run["evaluation"] = json.loads(record["evaluation_json"])
-                    test_run["evaluation_source"] = "cached"
-                
-                test_runs.append(test_run)
+        # Get the associated prompt to retrieve the expected solution if not in version
+        expected_solution = prompt_version.get("expected_solution")
+        if not expected_solution:
+            prompt_id = prompt_version.get("prompt_id")
+            if prompt_id:
+                prompt = neo4j_service.get_prompt(prompt_id)
+                expected_solution = prompt.get("expected_solution", "")
         
-        # Evaluate test runs that have expected answers but no evaluations
-        for test_run in test_runs:
-            if test_run.get("expected_answer") and not test_run.get("evaluation"):
-                try:
-                    if request.detailed_metrics:
-                        evaluation = await evaluator.evaluate_response_metrics(
-                            test_run["question"],
-                            test_run["expected_answer"],
-                            test_run["output"]
-                        )
-                    else:
-                        evaluation = await evaluator.evaluate_accuracy(
-                            test_run["question"],
-                            test_run["expected_answer"],
-                            test_run["output"]
-                        )
-                    
-                    test_run["evaluation"] = evaluation
-                    test_run["evaluation_source"] = "new"
-                    
-                    # Update the test run with the evaluation
-                    try:
-                        with neo4j_service.driver.session(database="neo4j") as session:
-                            session.run(
-                                """
-                                MATCH (tr:TestRun {id: $test_run_id})
-                                SET tr.evaluation_json = $evaluation_json
-                                """,
-                                test_run_id=test_run["test_run_id"],
-                                evaluation_json=json.dumps(evaluation)
-                            )
-                    except Exception as e:
-                        logger.error(f"Failed to update test run with evaluation: {str(e)}")
-                except Exception as e:
-                    logger.error(f"Error evaluating test run {test_run['test_run_id']}: {str(e)}")
-                    test_run["evaluation"] = {"error": str(e)}
-                    test_run["evaluation_source"] = "error"
-            
-            # If there's no expected answer, mark it
-            elif not test_run.get("expected_answer"):
-                test_run["evaluation"] = {"message": "No expected answer available"}
-                test_run["evaluation_source"] = "missing_expected_answer"
+        # Create the evaluator with the Neo4j service for saving results
+        evaluator = LLMEvaluator(
+            ollama_service=ollama_service,
+            evaluation_model=evaluation_model or "gemma3:4b",
+            neo4j_service=neo4j_service
+        )
         
-        return test_runs
+        # Evaluate detailed metrics
+        result = await evaluator.evaluate_response_metrics(
+            question=prompt_version.get("content", ""),
+            expected_answer=expected_solution or "",
+            actual_answer=test_run.get("output", ""),
+            prompt_version_id=prompt_version_id,
+            test_run_id=request.test_run_id,
+            model=request.model or test_run.get("model_used")
+        )
+        
+        # Create a response with all fields
+        response = EvaluationResponse(
+            id=str(uuid.uuid4()),
+            question=prompt_version.get("content", ""),
+            expected_answer=expected_solution or "",
+            actual_answer=test_run.get("output", ""),
+            accuracy=result.get("accuracy", 0.0),
+            relevance=result.get("relevance"),
+            completeness=result.get("completeness"),
+            conciseness=result.get("conciseness"),
+            overall_score=result.get("overall_score", 0.0),
+            explanation=result.get("explanation", ""),
+            created_at=datetime.now(),
+            model=request.model or test_run.get("model_used"),
+            prompt_version_id=prompt_version_id,
+            test_run_id=request.test_run_id
+        )
+        
+        return response
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error comparing test runs: {str(e)}")
+        logger.error(f"Error in evaluate_test_run_metrics: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/csv", response_model=Dict[str, Any])
-async def evaluate_csv_data(
-    file_path: str = Body(...),
-    evaluation_model: str = Body("gemma3:4b"),
-    detailed_metrics: bool = Body(False),
-    ollama_service: OllamaService = Depends(get_ollama_service)
+@router.post("/batch", response_model=BatchEvaluationResponse)
+async def evaluate_batch(
+    request: BatchEvaluationRequest,
+    ollama_service = Depends(get_ollama_service),
+    neo4j_service: Neo4jService = Depends(get_neo4j_service)
 ):
     """
-    Evaluate question-answer pairs from a CSV file.
-    
-    The CSV file should have 'question' and 'answer' columns.
-    The function will evaluate actual answers from a model against these expected answers.
+    Evaluate a batch of test runs using their linked prompt versions and prompt data.
     """
     try:
-        import csv
-        import os
+        # Create evaluator with the Neo4j service
+        evaluator = LLMEvaluator(
+            ollama_service=ollama_service,
+            evaluation_model=request.evaluation_model or "gemma3:4b",
+            neo4j_service=neo4j_service
+        )
         
-        # Check if the file exists
-        if not os.path.exists(file_path):
-            raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
-        
-        # Check if the evaluation model is running
-        running_models = ollama_service.list_running_models()
-        running_model_names = [model.name for model in running_models]
-        if evaluation_model not in running_model_names:
-            raise HTTPException(status_code=400, detail=f"Evaluation model {evaluation_model} is not running")
-        
-        # Create the evaluator
-        evaluator = LLMEvaluator(ollama_service, evaluation_model)
-        
-        # Read the CSV file
-        qa_pairs = []
-        with open(file_path, 'r', encoding='utf-8') as f:
-            reader = csv.reader(f)
-            header = next(reader)  # Read header row
-            
-            # Check if required columns exist
-            question_idx = header.index('question') if 'question' in header else None
-            answer_idx = header.index('answer') if 'answer' in header else None
-            
-            if question_idx is None or answer_idx is None:
-                raise HTTPException(status_code=400, detail="CSV must have 'question' and 'answer' columns")
-            
-            # Read rows
-            for row in reader:
-                if len(row) > max(question_idx, answer_idx):
-                    qa_pairs.append({
-                        "question": row[question_idx],
-                        "expected_answer": row[answer_idx]
-                    })
-        
-        # Process each question with the model to get actual answers
-        results = []
-        for qa in qa_pairs:
-            # Get the actual answer by processing the question with the model
+        # Process each test run ID
+        eval_dicts = []
+        for test_run_id in request.test_run_ids:
             try:
-                actual_answer = ollama_service.process_prompt(qa["question"], evaluation_model)
+                # Get the test run details
+                test_run = neo4j_service.get_test_run(test_run_id)
+                if not test_run:
+                    logger.warning(f"Test run with ID {test_run_id} not found. Skipping.")
+                    continue
                 
-                # Evaluate the answer
-                if detailed_metrics:
-                    evaluation = await evaluator.evaluate_response_metrics(
-                        qa["question"],
-                        qa["expected_answer"],
-                        actual_answer
-                    )
-                else:
-                    evaluation = await evaluator.evaluate_accuracy(
-                        qa["question"],
-                        qa["expected_answer"],
-                        actual_answer
-                    )
+                # Get the prompt version details
+                prompt_version_id = test_run.get("prompt_version_id")
+                prompt_version = neo4j_service.get_prompt_version(prompt_version_id)
+                if not prompt_version:
+                    logger.warning(f"Prompt version with ID {prompt_version_id} not found. Skipping.")
+                    continue
                 
-                # Add context to the result
-                result = {
-                    "question": qa["question"],
-                    "expected_answer": qa["expected_answer"],
-                    "actual_answer": actual_answer,
-                    **evaluation
-                }
+                # Get the associated prompt to retrieve the expected solution if not in version
+                expected_solution = prompt_version.get("expected_solution")
+                if not expected_solution:
+                    prompt_id = prompt_version.get("prompt_id")
+                    if prompt_id:
+                        prompt = neo4j_service.get_prompt(prompt_id)
+                        expected_solution = prompt.get("expected_solution", "")
                 
-                results.append(result)
-            except Exception as e:
-                results.append({
-                    "question": qa["question"],
-                    "expected_answer": qa["expected_answer"],
-                    "error": str(e)
+                # Add the evaluation item with question and expected answer
+                eval_dicts.append({
+                    "question": prompt_version.get("content", ""),
+                    "expected_answer": expected_solution or "",
+                    "actual_answer": test_run.get("output", ""),
+                    "prompt_version_id": prompt_version_id,
+                    "test_run_id": test_run_id,
+                    "model": test_run.get("model_used")
                 })
+            except Exception as e:
+                logger.error(f"Error processing test run {test_run_id}: {str(e)}")
+                continue
         
-        # Calculate summary statistics
-        summary = {
-            "total_questions": len(qa_pairs),
-            "completed_evaluations": len([r for r in results if "error" not in r]),
-            "failed_evaluations": len([r for r in results if "error" in r]),
-        }
+        # Evaluate the batch
+        results = await evaluator.evaluate_batch(eval_dicts, request.detailed_metrics)
         
-        if detailed_metrics:
-            # Calculate average scores across all dimensions
-            metrics = ["accuracy", "relevance", "completeness", "conciseness", "overall_score"]
-            for metric in metrics:
-                values = [r.get(metric, 0) for r in results if metric in r]
-                summary[f"avg_{metric}"] = sum(values) / len(values) if values else 0
-        else:
-            # Calculate average score and correct percentage
-            scores = [r.get("score", 0) for r in results if "score" in r]
-            correct = [r for r in results if r.get("is_correct", False)]
+        # Convert results to response models
+        responses = []
+        total_score = 0.0
+        
+        for result in results:
+            # Create evaluation response
+            response = EvaluationResponse(
+                id=str(uuid.uuid4()),
+                question=result.get("question", ""),
+                expected_answer=result.get("expected_answer", ""),
+                actual_answer=result.get("actual_answer", ""),
+                accuracy=result.get("accuracy", 0.0),
+                relevance=result.get("relevance"),
+                completeness=result.get("completeness"),
+                conciseness=result.get("conciseness"),
+                overall_score=result.get("overall_score", 0.0),
+                explanation=result.get("explanation", ""),
+                created_at=datetime.now(),
+                model=result.get("model"),
+                prompt_version_id=result.get("prompt_version_id"),
+                test_run_id=result.get("test_run_id")
+            )
+            responses.append(response)
+            total_score += response.overall_score
+        
+        # Calculate average score
+        average_score = total_score / len(responses) if responses else 0.0
+        
+        return BatchEvaluationResponse(
+            results=responses,
+            total_evaluations=len(responses),
+            average_score=average_score
+        )
+    except Exception as e:
+        logger.error(f"Error in evaluate_batch: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+        
+@router.get("/test-run/{test_run_id}", response_model=List[EvaluationResponse])
+async def get_evaluations_for_test_run(
+    test_run_id: str,
+    neo4j_service: Neo4jService = Depends(get_neo4j_service)
+):
+    """
+    Get all evaluations for a specific test run.
+    """
+    try:
+        # Check if the test run exists
+        test_run = neo4j_service.get_test_run(test_run_id)
+        if not test_run:
+            raise HTTPException(status_code=404, detail=f"Test run with ID {test_run_id} not found")
             
-            summary["avg_score"] = sum(scores) / len(scores) if scores else 0
-            summary["correct_percentage"] = len(correct) / len(results) * 100 if results else 0
+        # Retrieve evaluations from Neo4j
+        evaluations = neo4j_service.get_evaluations_for_test_run(test_run_id)
         
-        return {
-            "results": results,
-            "summary": summary
-        }
+        # Convert to response models
+        responses = []
+        for eval_dict in evaluations:
+            responses.append(EvaluationResponse(
+                id=eval_dict.get("id", ""),
+                question=eval_dict.get("question", ""),
+                expected_answer=eval_dict.get("expected_answer", ""),
+                actual_answer=eval_dict.get("actual_answer", ""),
+                accuracy=eval_dict.get("accuracy", 0.0),
+                relevance=eval_dict.get("relevance"),
+                completeness=eval_dict.get("completeness"),
+                conciseness=eval_dict.get("conciseness"),
+                overall_score=eval_dict.get("overall_score", 0.0),
+                explanation=eval_dict.get("explanation", ""),
+                created_at=eval_dict.get("created_at", datetime.now()),
+                model=eval_dict.get("model"),
+                prompt_version_id=eval_dict.get("prompt_version_id"),
+                test_run_id=test_run_id
+            ))
+        
+        return responses
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error evaluating CSV data: {str(e)}")
+        logger.error(f"Error retrieving evaluations: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
