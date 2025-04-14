@@ -364,92 +364,6 @@ Example response:
 ]
 ```
 
-## Example Usage Flow
-
-1. First, check the status of all models:
-```bash
-curl http://localhost:8000/api/models/status
-```
-
-2. Pull multiple models:
-```bash
-curl -X POST http://localhost:8000/api/models/pull/batch \
-  -H "Content-Type: application/json" \
-  -d '{
-    "models": ["deepseek-r1:1.5b", "gemma3:1b"]
-  }'
-```
-
-3. Check the status again to confirm the models are pulled:
-```bash
-curl http://localhost:8000/api/models/status
-```
-
-4. Start multiple models:
-```bash
-curl -X POST http://localhost:8000/api/models/start/batch \
-  -H "Content-Type: application/json" \
-  -d '{
-    "models": ["deepseek-r1:1.5b", "gemma3:1b"]
-  }'
-```
-
-5. Check running models:
-```bash
-curl http://localhost:8000/api/models/running
-```
-
-6. Process a prompt with multiple models:
-```bash
-curl -X POST http://localhost:8000/api/batch \
-  -H "Content-Type: application/json" \
-  -d '{
-    "prompt": "What is the capital of France?",
-    "models": ["deepseek-r1:1.5b", "gemma3:1b"]
-  }'
-```
-
-7. Create a prompt in Neo4j:
-```bash
-curl -X POST http://localhost:8000/api/prompts \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Geography Questions",
-    "description": "Prompts about geography",
-    "tags": ["geography", "education"]
-  }'
-```
-
-8. Create a prompt version:
-```bash
-curl -X POST http://localhost:8000/api/prompt-versions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "prompt_id": "<PROMPT_ID>",
-    "content": "What is the capital of {country}?",
-    "version": "1.0"
-  }'
-```
-
-9. Test the prompt and save the results:
-```bash
-curl -X POST "http://localhost:8000/api/test-prompt-and-save?version_id=<VERSION_ID>&model_name=deepseek-r1:1.5b&prompt=What%20is%20the%20capital%20of%20France?"
-```
-
-10. Get the test results:
-```bash
-curl http://localhost:8000/api/prompt-versions/<VERSION_ID>/test-runs
-```
-
-11. Stop multiple models when done:
-```bash
-curl -X POST http://localhost:8000/api/models/stop/batch \
-  -H "Content-Type: application/json" \
-  -d '{
-    "models": ["deepseek-r1:1.5b", "gemma3:1b"]
-  }'
-```
-
 ## Notes
 - The maximum number of running models is limited to 2
 - Models must be pulled before they can be started
@@ -467,3 +381,211 @@ curl -X POST http://localhost:8000/api/models/stop/batch \
   - Test run storage with metrics
   - Ability to compare different prompt versions
   - Full-text search across test run results
+
+## Prompt Generation Endpoints
+
+### Generate Prompt Variations
+```bash
+curl -X POST http://localhost:8000/api/generation/generate-variations \
+  -H "Content-Type: application/json" \
+  -d '{
+    "base_prompt": "What is the capital of {country}?",
+    "num_variations": 3,
+    "variation_type": "rephrase",
+    "template_params": {"country": "placeholder"}
+  }'
+```
+Example response:
+```json
+{
+  "variations": [
+    "Could you tell me what the capital of {country} is?",
+    "What city serves as the capital of {country}?",
+    "I need to know the capital city of {country}, what is it?"
+  ],
+  "original_prompt": "What is the capital of {country}?",
+  "variation_type": "rephrase",
+  "generation_time": 1.245
+}
+```
+
+### Generate Multiple Prompt Variations in Batch
+```bash
+curl -X POST http://localhost:8000/api/generation/batch-generate-variations \
+  -H "Content-Type: application/json" \
+  -d '{
+    "base_prompts": [
+      "What is the capital of {country}?",
+      "Who is the president of {country}?"
+    ],
+    "num_variations_each": 2,
+    "variation_types": ["formalize", "casual"],
+    "template_params": {"country": "placeholder"},
+    "generator_model": "llama3:8b"
+  }'
+```
+Example response:
+```json
+{
+  "results": [
+    {
+      "variations": [
+        "I would like to inquire about the capital city of {country}. Could you please provide me with this information?",
+        "May I request information regarding the capital of {country}?"
+      ],
+      "original_prompt": "What is the capital of {country}?",
+      "variation_type": "formalize",
+      "generation_time": 1.834
+    },
+    {
+      "variations": [
+        "Hey, what's the capital of {country}?",
+        "So, tell me, what city is the capital of {country}?"
+      ],
+      "original_prompt": "What is the capital of {country}?",
+      "variation_type": "casual",
+      "generation_time": 1.523
+    },
+    {
+      "variations": [
+        "I would like to inquire about the current head of state of {country}. Could you please inform me who holds the office of president?",
+        "Could you kindly provide information regarding the individual who currently serves as the president of {country}?"
+      ],
+      "original_prompt": "Who is the president of {country}?",
+      "variation_type": "formalize",
+      "generation_time": 1.945
+    },
+    {
+      "variations": [
+        "Hey, who's running {country} these days? Like, who's the president?",
+        "So who's the big boss of {country} right now? The president, I mean."
+      ],
+      "original_prompt": "Who is the president of {country}?",
+      "variation_type": "casual",
+      "generation_time": 1.632
+    }
+  ],
+  "total_variations": 8,
+  "failed_prompts": []
+}
+```
+
+### Analyze a Prompt
+```bash
+curl -X POST http://localhost:8000/api/generation/analyze-prompt \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "What is the capital of {country}?",
+    "generator_model": "llama3:8b"
+  }'
+```
+Example response:
+```json
+{
+  "clarity": 9,
+  "specificity": 8,
+  "potential_issues": [
+    "The prompt doesn't specify what level of detail is expected in the answer",
+    "Some countries might have disputed capitals or multiple capital cities"
+  ],
+  "improvement_suggestions": [
+    "Consider specifying whether you want just the name or additional information",
+    "You could clarify whether you want the administrative capital, legislative capital, or both for countries with multiple capitals"
+  ],
+  "template_parameters": [
+    "country"
+  ]
+}
+```
+
+### Generate Variations and Create Versions
+```bash
+curl -X POST "http://localhost:8000/api/generation/generate-and-create-versions?prompt_id=550e8400-e29b-41d4-a716-446655440000" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "base_prompt": "What is the capital of {country}?",
+    "num_variations": 3,
+    "variation_type": "multiple_choice",
+    "template_params": {"country": "placeholder"}
+  }'
+```
+Example response:
+```json
+{
+  "created_versions": [
+    {
+      "prompt_id": "550e8400-e29b-41d4-a716-446655440000",
+      "version_id": "770e8400-e29b-41d4-a716-446655440001",
+      "version": "multiple_choice_1",
+      "content": "Which city is the capital of {country}?\nA) Paris\nB) London\nC) Berlin\nD) Rome\nE) None of the above"
+    },
+    {
+      "prompt_id": "550e8400-e29b-41d4-a716-446655440000",
+      "version_id": "770e8400-e29b-41d4-a716-446655440002",
+      "version": "multiple_choice_2",
+      "content": "From the following options, select the capital city of {country}:\n1. Tokyo\n2. Beijing\n3. Moscow\n4. Madrid\n5. Other"
+    },
+    {
+      "prompt_id": "550e8400-e29b-41d4-a716-446655440000",
+      "version_id": "770e8400-e29b-41d4-a716-446655440003",
+      "version": "multiple_choice_3",
+      "content": "The capital of {country} is:\na) New York\nb) Cairo\nc) Sydney\nd) Bangkok\ne) None of these"
+    }
+  ],
+  "failed_versions": [],
+  "total_created": 3,
+  "total_failed": 0,
+  "generation_time": 2.347,
+  "variation_type": "multiple_choice"
+}
+```
+
+## Extended Usage Flow with Prompt Generation
+
+Building on the previous example flow, here's how to incorporate prompt generation:
+
+12. After creating a basic prompt version, generate variations of it:
+```bash
+curl -X POST http://localhost:8000/api/generation/generate-variations \
+  -H "Content-Type: application/json" \
+  -d '{
+    "base_prompt": "What is the capital of {country}?",
+    "num_variations": 3,
+    "variation_type": "add_context",
+    "template_params": {"country": "placeholder"}
+  }'
+```
+
+13. Select the variation you prefer and create a new version from it:
+```bash
+curl -X POST http://localhost:8000/api/prompt-versions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt_id": "<PROMPT_ID>",
+    "content": "Given that countries can change their capitals over time, what is the current official capital city of {country}?",
+    "version": "1.1",
+    "derived_from": "<ORIGINAL_VERSION_ID>"
+  }'
+```
+
+14. Or use the combined endpoint to generate variations and create versions all at once:
+```bash
+curl -X POST "http://localhost:8000/api/generation/generate-and-create-versions?prompt_id=<PROMPT_ID>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "base_prompt": "What is the capital of {country}?",
+    "num_variations": 3,
+    "variation_type": "add_irrelevant",
+    "template_params": {"country": "placeholder"}
+  }'
+```
+
+15. Run tests on all versions to compare performance:
+```bash
+curl -X POST http://localhost:8000/api/run-tests \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt_version_ids": ["<VERSION_ID_1>", "<VERSION_ID_2>", "<VERSION_ID_3>"],
+    "models": ["deepseek-r1:1.5b"]
+  }'
+```

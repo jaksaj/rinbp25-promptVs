@@ -181,3 +181,84 @@ class TestResultsAggregation(BaseModel):
     best_performing_model: str
     best_performing_version: str
     comparison_metrics: Dict[str, Dict[str, float]] = {}
+
+# New models for prompt generation
+
+class PromptVariationRequest(BaseModel):
+    base_prompt: str
+    num_variations: int = 3
+    variation_type: str = "rephrase"
+    template_params: Optional[Dict[str, Any]] = None
+    generator_model: Optional[str] = None
+
+class PromptVariationResponse(BaseModel):
+    variations: List[str]
+    original_prompt: str
+    variation_type: str
+    generation_time: float
+
+class BatchGenerateVariationsRequest(BaseModel):
+    base_prompts: List[str]
+    num_variations_each: int = 3
+    variation_types: List[str] = ["rephrase"]
+    template_params: Optional[Dict[str, Any]] = None
+    generator_model: Optional[str] = None
+
+class BatchGenerateVariationsResponse(BaseModel):
+    results: List[PromptVariationResponse]
+    total_variations: int
+    failed_prompts: List[str] = []
+
+class PromptAnalysisRequest(BaseModel):
+    prompt: str
+    generator_model: Optional[str] = None
+
+class PromptAnalysisResponse(BaseModel):
+    clarity: int
+    specificity: int
+    potential_issues: List[str]
+    improvement_suggestions: List[str]
+    template_parameters: List[str]
+    raw_response: Optional[str] = None
+
+# New models for simplified prompt generation
+
+class VariationTypeRequest(BaseModel):
+    variation_type: str
+    instruction: str
+
+class VariationTypeResponse(BaseModel):
+    variation_types: Dict[str, str]
+
+class GenerateVariationsRequest(BaseModel):
+    prompt_uuid: str
+    variation_types: List[str]
+    template_params: Optional[Dict[str, Any]] = None
+    save: bool = False
+    generator_model: Optional[str] = None
+
+class PromptVariation(BaseModel):
+    variation_type: str
+    content: str
+    uuid: Optional[str] = None
+
+class GenerateVariationsResponse(BaseModel):
+    prompt_uuid: str
+    variations: List[PromptVariation]
+    original_prompt: str
+
+class BatchGenerateVariationsRequest(BaseModel):
+    prompt_uuids: List[str]
+    variation_types: List[str]
+    template_params: Optional[Dict[str, Any]] = None
+    save: bool = False
+    generator_model: Optional[str] = None
+
+class BatchVariationResult(BaseModel):
+    prompt_uuid: str
+    variations: List[PromptVariation]
+    original_prompt: str
+
+class BatchGenerateVariationsResponse(BaseModel):
+    results: List[BatchVariationResult]
+    total_variations: int
