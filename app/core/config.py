@@ -13,7 +13,7 @@ API_DESCRIPTION = "API for processing prompts using Ollama"
 OLLAMA_MODEL = "deepseek-r1:1.5b"
 OLLAMA_HOST = "http://localhost:11434"
 OLLAMA_TIMEOUT = 300  # 5 minutes
-MAX_RUNNING_MODELS = 2  # Maximum number of models that can run simultaneously
+MAX_RUNNING_MODELS = 3  # Maximum number of models that can run simultaneously
 
 # Default Models
 DEFAULT_MODELS = [
