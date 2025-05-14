@@ -97,7 +97,8 @@ async def generate_prompt_variations(
         variations_tuples = await prompt_generator.generate_variations(
             base_prompt=original_prompt["content"],
             variation_types=request.variation_types,
-            template_params=request.template_params
+            template_params=request.template_params,
+            domain=request.domain
         )
         
         # Reset the generator model if it was overridden
@@ -174,7 +175,8 @@ async def batch_generate_prompt_variations(
                 variations_tuples = await prompt_generator.generate_variations(
                     base_prompt=original_prompt["content"],
                     variation_types=request.variation_types,
-                    template_params=request.template_params
+                    template_params=request.template_params,
+                    domain=request.domain
                 )
                 
                 # Process and optionally save the variations

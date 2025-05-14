@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import prompts, models, prompt_versioning, batch_operations, evaluations, prompt_generation
+from app.api.routes import prompts, models, prompt_versioning, batch_operations, evaluations, prompting_techniques
 from app.core.dependencies import get_ollama_service, get_neo4j_service
 from app.services.ollama import OllamaService
 from app.services.neo4j import Neo4jService
@@ -30,10 +30,10 @@ app.add_middleware(
 # Include routers
 app.include_router(prompts.router, prefix="/api")
 app.include_router(models.router, prefix="/api")
-app.include_router(prompt_versioning.router, prefix="/api")  # Add new router
-app.include_router(batch_operations.router, prefix="/api")  # Add batch operations router
-app.include_router(evaluations.router, prefix="/api")  # Add evaluations router
-app.include_router(prompt_generation.router, prefix="/api/generation")  # Add prompt generation router
+app.include_router(prompt_versioning.router, prefix="/api")
+app.include_router(batch_operations.router, prefix="/api")
+app.include_router(evaluations.router, prefix="/api")
+app.include_router(prompting_techniques.router, prefix="/api/techniques")  # Replace prompt generation with prompting techniques
 
 @app.get("/")
 async def root():

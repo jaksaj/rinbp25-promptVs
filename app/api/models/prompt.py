@@ -198,11 +198,12 @@ class PromptVariationResponse(BaseModel):
     generation_time: float
 
 class BatchGenerateVariationsRequest(BaseModel):
-    base_prompts: List[str]
-    num_variations_each: int = 3
-    variation_types: List[str] = ["rephrase"]
+    prompt_uuids: List[str]
+    variation_types: List[str]
     template_params: Optional[Dict[str, Any]] = None
+    save: bool = False
     generator_model: Optional[str] = None
+    domain: Optional[str] = None  # Added domain context for prompting techniques like few-shot prompting
 
 class BatchGenerateVariationsResponse(BaseModel):
     results: List[PromptVariationResponse]
@@ -236,6 +237,7 @@ class GenerateVariationsRequest(BaseModel):
     template_params: Optional[Dict[str, Any]] = None
     save: bool = False
     generator_model: Optional[str] = None
+    domain: Optional[str] = None  # Added domain context for prompting techniques like few-shot prompting
 
 class PromptVariation(BaseModel):
     variation_type: str
@@ -253,6 +255,7 @@ class BatchGenerateVariationsRequest(BaseModel):
     template_params: Optional[Dict[str, Any]] = None
     save: bool = False
     generator_model: Optional[str] = None
+    domain: Optional[str] = None  # Added domain context for prompting techniques like few-shot prompting
 
 class BatchVariationResult(BaseModel):
     prompt_uuid: str
@@ -294,3 +297,56 @@ class BatchEvaluationResponse(BaseModel):
     results: List[EvaluationResponse]
     total_evaluations: int
     average_score: float
+
+# Prompting technique models
+class PromptingTechniqueInfo(BaseModel):
+    name: str
+    description: str
+    complexity: str
+
+class PromptingTechniquesResponse(BaseModel):
+    techniques: Dict[str, PromptingTechniqueInfo]
+
+class ApplyTechniqueRequest(BaseModel):
+    prompt_id: str
+    technique: str
+    domain: Optional[str] = None
+    num_paths: Optional[int] = 3  # Number of reasoning paths for self-consistency
+    num_examples: Optional[int] = 2  # Number of examples for few-shot prompting
+    template_params: Optional[Dict[str, Any]] = None
+    save_as_version: bool = False
+    generator_model: Optional[str] = None
+
+class ApplyTechniqueResponse(BaseModel):
+    prompt_id: str
+    technique: str
+    original_prompt: str
+    transformed_prompt: str
+    version_id: Optional[str] = None
+
+class BatchApplyTechniqueRequest(BaseModel):
+    prompt_ids: List[str]
+    techniques: List[str]
+    domain: Optional[str] = None
+    num_paths: Optional[int] = 3  # Number of reasoning paths for self-consistency
+    num_examples: Optional[int] = 2  # Number of examples for few-shot prompting
+    template_params: Optional[Dict[str, Any]] = None
+    save_as_versions: bool = False
+    generator_model: Optional[str] = None
+
+class TechniqueResult(BaseModel):
+    prompt_id: str
+    technique: str
+    original_prompt: str
+    transformed_prompt: str
+    version_id: Optional[str] = None
+
+class BatchApplyTechniqueResponse(BaseModel):
+    results: List[TechniqueResult]
+    total_transformations: int
+
+class TechniqueExampleResponse(BaseModel):
+    name: str
+    description: str
+    original_prompt: str
+    transformed_prompt: str
