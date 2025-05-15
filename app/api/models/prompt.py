@@ -307,6 +307,37 @@ class PromptingTechniqueInfo(BaseModel):
 class PromptingTechniquesResponse(BaseModel):
     techniques: Dict[str, PromptingTechniqueInfo]
 
+# New models for A/B testing and ELO rating system
+class ComparisonRequest(BaseModel):
+    test_run_id1: str
+    test_run_id2: str
+    compare_within_version: bool = False
+
+class ComparisonResult(BaseModel):
+    id: str
+    test_run_id1: str
+    test_run_id2: str
+    winner_test_run_id: str
+    explanation: str
+    created_at: datetime
+    compare_within_version: bool
+
+class BatchComparisonRequest(BaseModel):
+    test_run_pairs: List[Dict[str, str]]  # List of pairs with test_run_id1 and test_run_id2
+    compare_within_version: bool = False
+
+class BatchComparisonResponse(BaseModel):
+    results: List[ComparisonResult]
+    total_comparisons: int
+
+class EloRatingResult(BaseModel):
+    id: str
+    test_run_id: str
+    elo_score: int
+    version_elo_score: int  # For comparisons within the same prompt version
+    global_elo_score: int   # For comparisons across different prompt versions
+    updated_at: datetime
+
 class ApplyTechniqueRequest(BaseModel):
     prompt_id: str
     technique: str

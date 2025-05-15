@@ -706,3 +706,261 @@ class Neo4jService:
         except Exception as e:
             logger.error(f"Error getting evaluation by ID: {str(e)}")
             raise
+
+    def create_comparison_result(self, comparison_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Save an A/B test comparison result between two test runs.
+        
+        Args:
+            comparison_data: Dictionary containing comparison result data
+            
+        Returns:
+            The created comparison result with ID and timestamp
+        """
+        try:
+            # Generate an ID for the comparison
+            comparison_id = str(uuid.uuid4())
+            current_time = datetime.now(timezone.utc).isoformat()
+            
+            # Prepare the comparison node data
+            comparison_properties = {
+                "id": comparison_id,
+                "test_run_id1": comparison_data.get("test_run_id1"),
+                "test_run_id2": comparison_data.get("test_run_id2"),
+                "winner_test_run_id": comparison_data.get("winner_test_run_id"),
+                "explanation": comparison_data.get("explanation", ""),
+                "created_at": current_time,
+                "compare_within_version": comparison_data.get("compare_within_version", False)
+            }
+            
+            with self.driver.session(database=NEO4J_DATABASE) as session:
+                # Create the comparison node
+                query = """
+                CREATE (c:ComparisonResult $properties)
+                RETURN c
+                """
+                
+                result = session.run(query, properties=comparison_properties)
+                comparison_node = result.single()
+                
+                # Link to both test runs
+                link_query1 = """
+                MATCH (c:ComparisonResult {id: $comparison_id})
+                MATCH (tr:TestRun {id: $tr_id})
+                CREATE (c)-[:COMPARES]->(tr)
+                RETURN c, tr
+                """
+                
+                link_query2 = """
+                MATCH (c:ComparisonResult {id: $comparison_id})
+                MATCH (tr:TestRun {id: $tr_id})
+                CREATE (c)-[:COMPARES]->(tr)
+                RETURN c, tr
+                """
+                
+                winner_query = """
+                MATCH (c:ComparisonResult {id: $comparison_id})
+                MATCH (tr:TestRun {id: $tr_id})
+                CREATE (c)-[:WINNER]->(tr)
+                RETURN c, tr
+                """
+                
+                session.run(link_query1, comparison_id=comparison_id, tr_id=comparison_data.get("test_run_id1"))
+                session.run(link_query2, comparison_id=comparison_id, tr_id=comparison_data.get("test_run_id2"))
+                session.run(winner_query, comparison_id=comparison_id, tr_id=comparison_data.get("winner_test_run_id"))
+                
+                return {**comparison_properties, "id": comparison_id}
+                
+        except Exception as e:
+            logger.error(f"Error creating comparison result: {str(e)}")
+            raise
+    
+    def get_comparison_results(self, test_run_id: str = None) -> List[Dict[str, Any]]:
+        """
+        Get comparison results, optionally filtered by test run ID.
+        
+        Args:
+            test_run_id: Optional test run ID to filter comparisons
+            
+        Returns:
+            List of comparison results
+        """
+        try:
+            with self.driver.session(database=NEO4J_DATABASE) as session:
+                if test_run_id:
+                    # Get comparisons involving a specific test run
+                    query = """
+                    MATCH (c:ComparisonResult)-[:COMPARES]->(tr:TestRun {id: $tr_id})
+                    RETURN c
+                    """
+                    result = session.run(query, tr_id=test_run_id)
+                else:
+                    # Get all comparisons
+                    query = """
+                    MATCH (c:ComparisonResult)
+                    RETURN c
+                    """
+                    result = session.run(query)
+                
+                return [dict(record["c"]) for record in result]
+                
+        except Exception as e:
+            logger.error(f"Error getting comparison results: {str(e)}")
+            raise
+    
+    def create_elo_rating(self, elo_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Create or update the ELO rating for a test run.
+        
+        Args:
+            elo_data: Dictionary containing ELO rating data
+            
+        Returns:
+            The created/updated ELO rating with ID
+        """
+        try:
+            current_time = datetime.now(timezone.utc).isoformat()
+            test_run_id = elo_data.get("test_run_id")
+            
+            with self.driver.session(database=NEO4J_DATABASE) as session:
+                # Check if ELO rating exists for this test run
+                check_query = """
+                MATCH (e:EloRating)-[:RATES]->(tr:TestRun {id: $tr_id})
+                RETURN e
+                """
+                check_result = session.run(check_query, tr_id=test_run_id)
+                existing_elo = check_result.single()
+                
+                if existing_elo:
+                    # Update existing ELO rating
+                    update_query = """
+                    MATCH (e:EloRating)-[:RATES]->(tr:TestRun {id: $tr_id})
+                    SET e.elo_score = $elo_score,
+                        e.version_elo_score = $version_elo_score,
+                        e.global_elo_score = $global_elo_score,
+                        e.updated_at = $updated_at
+                    RETURN e
+                    """
+                    
+                    result = session.run(
+                        update_query, 
+                        tr_id=test_run_id,
+                        elo_score=elo_data.get("elo_score", 1000),
+                        version_elo_score=elo_data.get("version_elo_score", 1000),
+                        global_elo_score=elo_data.get("global_elo_score", 1000),
+                        updated_at=current_time
+                    )
+                    
+                    updated_elo = result.single()
+                    return dict(updated_elo["e"])
+                else:
+                    # Create new ELO rating
+                    elo_id = str(uuid.uuid4())
+                    create_query = """
+                    CREATE (e:EloRating {
+                        id: $id,
+                        test_run_id: $tr_id,
+                        elo_score: $elo_score,
+                        version_elo_score: $version_elo_score,
+                        global_elo_score: $global_elo_score,
+                        created_at: $created_at,
+                        updated_at: $updated_at
+                    })
+                    RETURN e
+                    """
+                    
+                    result = session.run(
+                        create_query,
+                        id=elo_id,
+                        tr_id=test_run_id,
+                        elo_score=elo_data.get("elo_score", 1000),
+                        version_elo_score=elo_data.get("version_elo_score", 1000),
+                        global_elo_score=elo_data.get("global_elo_score", 1000),
+                        created_at=current_time,
+                        updated_at=current_time
+                    )
+                    
+                    new_elo = result.single()
+                    
+                    # Link to test run
+                    link_query = """
+                    MATCH (e:EloRating {id: $elo_id})
+                    MATCH (tr:TestRun {id: $tr_id})
+                    CREATE (e)-[:RATES]->(tr)
+                    RETURN e, tr
+                    """
+                    
+                    session.run(link_query, elo_id=elo_id, tr_id=test_run_id)
+                    
+                    return dict(new_elo["e"])
+                    
+        except Exception as e:
+            logger.error(f"Error creating/updating ELO rating: {str(e)}")
+            raise
+    
+    def get_elo_rating(self, test_run_id: str) -> Dict[str, Any]:
+        """
+        Get the ELO rating for a test run.
+        
+        Args:
+            test_run_id: Test run ID
+            
+        Returns:
+            ELO rating data or None if not found
+        """
+        try:
+            with self.driver.session(database=NEO4J_DATABASE) as session:
+                query = """
+                MATCH (e:EloRating)-[:RATES]->(tr:TestRun {id: $tr_id})
+                RETURN e
+                """
+                
+                result = session.run(query, tr_id=test_run_id)
+                record = result.single()
+                
+                return dict(record["e"]) if record else None
+                
+        except Exception as e:
+            logger.error(f"Error getting ELO rating: {str(e)}")
+            raise
+    
+    def get_all_elo_ratings(self, prompt_id: str = None) -> List[Dict[str, Any]]:
+        """
+        Get all ELO ratings, optionally filtered by prompt.
+        
+        Args:
+            prompt_id: Optional prompt ID to filter ratings
+            
+        Returns:
+            List of ELO rating data
+        """
+        try:
+            with self.driver.session(database=NEO4J_DATABASE) as session:
+                if prompt_id:
+                    # Get ELO ratings for a specific prompt's test runs
+                    query = """
+                    MATCH (e:EloRating)-[:RATES]->(tr:TestRun)-[:FROM_VERSION]->(pv:PromptVersion)-[:VERSION_OF]->(p:Prompt {id: $p_id})
+                    RETURN e, tr.id as test_run_id, pv.id as prompt_version_id, pv.version as version
+                    """
+                    result = session.run(query, p_id=prompt_id)
+                else:
+                    # Get all ELO ratings
+                    query = """
+                    MATCH (e:EloRating)-[:RATES]->(tr:TestRun)-[:FROM_VERSION]->(pv:PromptVersion)
+                    RETURN e, tr.id as test_run_id, pv.id as prompt_version_id, pv.version as version
+                    """
+                    result = session.run(query)
+                
+                ratings = []
+                for record in result:
+                    elo_data = dict(record["e"])
+                    elo_data["test_run_id"] = record["test_run_id"]
+                    elo_data["prompt_version_id"] = record["prompt_version_id"]
+                    elo_data["version"] = record["version"]
+                    ratings.append(elo_data)
+                
+                return ratings
+                
+        except Exception as e:
+            logger.error(f"Error getting all ELO ratings: {str(e)}")
+            raise
