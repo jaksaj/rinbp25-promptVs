@@ -105,8 +105,7 @@ class ABTestingEvaluator:
         if not prompt_version1 or not prompt_version2:
             missing_id = prompt_version_id1 if not prompt_version1 else prompt_version_id2
             raise ValueError(f"Prompt version with ID {missing_id} not found")
-        
-        # Get the original prompt as context
+          # Get the original prompt as context
         prompt_id1 = prompt_version1.get("prompt_id")
         prompt1 = self.neo4j_service.get_prompt(prompt_id1)
         
@@ -119,7 +118,14 @@ class ABTestingEvaluator:
         output2 = test_run2.get("output", "")
         
         # Construct the comparison prompt
-        prompt_text = prompt1.get("content", prompt_version1.get("content", ""))
+        # If comparing within the same version, use prompt version content
+        # Otherwise use original prompt content (with fallback to version content)
+        if compare_within_version:
+            # For within-version comparison, use the prompt version content
+            prompt_text = prompt_version1.get("content", "")
+        else:
+            # For across-version comparison, use the original prompt content with fallback
+            prompt_text = prompt1.get("content", prompt_version1.get("content", ""))
         expected_solution = (prompt1.get("expected_solution") or 
                            prompt_version1.get("expected_solution") or 
                            "")
