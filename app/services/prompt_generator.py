@@ -11,7 +11,9 @@ from .prompting_techniques import (
     apply_cot_simple,
     apply_cot_reasoning,
     apply_few_shot,
-    apply_self_consistency
+    apply_self_consistency,
+    apply_role_prompting,
+    apply_reflexion_prompting
 )
 
 logger = logging.getLogger(__name__)
@@ -48,6 +50,16 @@ class PromptGenerator:
                 "name": "Self-Consistency",
                 "description": "Asks for multiple reasoning paths to find the most consistent answer",
                 "complexity": "high"
+            },            
+            "role_prompting": {
+                "name": "Role Prompting",
+                "description": "Ask the model to respond as if it were a specific expert or persona",
+                "complexity": "low"
+            },
+            "reflexion_prompting": {
+                "name": "Reflexion Prompting",
+                "description": "Ask the model to solve a problem and then critically review its own solution",
+                "complexity": "medium"
             }
         }
     
@@ -71,7 +83,6 @@ class PromptGenerator:
             Information about the technique or None if not found
         """
         return self.prompting_techniques.get(technique_id)
-    
     async def apply_technique(self,
                              prompt: str,
                              technique: str,
@@ -128,6 +139,20 @@ class PromptGenerator:
                 self.generator_model,
                 prompt,
                 num_paths,
+                template_params
+            )
+        elif technique == "role_prompting":
+            return await apply_role_prompting(
+                self.ollama_service,
+                self.generator_model,
+                prompt,
+                template_params
+            )
+        elif technique == "reflexion_prompting":
+            return await apply_reflexion_prompting(
+                self.ollama_service,
+                self.generator_model,
+                prompt,
                 template_params
             )
         else:
