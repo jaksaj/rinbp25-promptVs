@@ -1,20 +1,15 @@
 {
-  "timestamp": "2025-05-25T20:16:00.567410",
-  "config_file": "test_prompts_config.json",
+  "timestamp": "2025-05-25T20:54:46.139232",
+  "config_file": "../config/test_prompts_config.json",
   "api_base_url": "http://localhost:8000",
-  "prompt_group_id": "753a8ea0-7556-4344-b98f-7fc60330b5b4",
+  "prompt_group_id": "f239b999-8136-455c-9201-ae9620c11632",
   "prompt_ids": [
-    "11ae55e1-be61-47bb-a472-2a40d78f570b",
-    "77466c80-bf6b-4e94-8071-31f63da3afe7"
+    "bdd3c81d-7602-4f44-8679-8779d3944e14"
   ],
   "prompt_versions": {
-    "11ae55e1-be61-47bb-a472-2a40d78f570b": [
-      "d11a6bb5-e768-4ab6-8413-4d7d3db2e1d2",
-      "e0015a65-cf6a-4920-b64e-0f88ca83be12"
-    ],
-    "77466c80-bf6b-4e94-8071-31f63da3afe7": [
-      "19990d94-378c-4390-bfd2-4e11388659e0",
-      "866c402a-0f6a-4008-bdbc-79e4d42ebb0b"
+    "bdd3c81d-7602-4f44-8679-8779d3944e14": [
+      "7878058f-e57b-4bef-a290-deb325ee80a1",
+      "e24df807-1e64-4ad9-9cec-85aa1afb7e7f"
     ]
   },
   "generator_model": "gemma3:4b",
@@ -34,17 +29,6 @@
         "description": "Perform breadth-first search on a directed graph",
         "content": "You will be given a list of directed edges and an operation to perform.\nFor BFS, return only the nodes reached at the specified depth (not the starting node).\nFor parents, return only nodes with edges pointing to the given node (not the node itself).\nThe graph has the following edges:\nA -> B\nA -> C\nB -> D\nOperation:\nPerform a BFS from node A with depth 1.",
         "expected_solution": "[B, C]",
-        "tags": [
-          "graph",
-          "bfs",
-          "algorithms"
-        ]
-      },
-      {
-        "name": "Graph BFS from B",
-        "description": "Perform breadth-first search on a directed graph",
-        "content": "You will be given a list of directed edges and an operation to perform.\nFor BFS, return only the nodes reached at the specified depth (not the starting node).\nFor parents, return only nodes with edges pointing to the given node (not the node itself).\nThe graph has the following edges:\nA -> B\nA -> C\nB -> D\nOperation:\nPerform a BFS from node B with depth 1.",
-        "expected_solution": "[D]",
         "tags": [
           "graph",
           "bfs",

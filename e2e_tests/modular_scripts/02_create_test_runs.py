@@ -129,13 +129,13 @@ class TestRunCreator:
         if self.check_api_health():
             logger.info("API server is already running")
             return True
-        
         logger.info("Starting API server...")
         try:
-            # Start the API server in background
+            # Start the API server in background - go up to project root
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
             subprocess.Popen([
                 sys.executable, "run.py"
-            ], cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            ], cwd=project_root)
             
             # Wait for server to start
             for i in range(30):  # Wait up to 30 seconds
