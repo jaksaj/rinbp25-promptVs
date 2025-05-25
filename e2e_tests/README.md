@@ -19,6 +19,15 @@ python e2e_test.py
 
 # Or use the runner script
 python run_e2e_test.py
+
+#Script 1
+python 01_create_prompts_and_versions.py --verbose
+
+#Script 2
+python 02_create_test_runs.py --runs-per-version 1 --verbose
+
+#Script 3
+python 03_ab_testing_evaluations.py --verbose
 ```
 
 ## Files
@@ -27,7 +36,6 @@ python run_e2e_test.py
 - **`test_prompts_config.json`** - Test prompts configuration
 - **`quick_test.py`** - Quick API verification
 - **`run_e2e_test.py`** - Environment setup runner
-- **`run_tests.bat`** - Windows batch script
 - **`E2E_TEST_README.md`** - Detailed documentation
 - **`TEST_SUITE_SUMMARY.md`** - Complete overview
 

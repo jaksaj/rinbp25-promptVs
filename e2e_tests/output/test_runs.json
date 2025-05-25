@@ -1,0 +1,32 @@
+{
+  "timestamp": "2025-05-25T21:07:37.090001",
+  "api_base_url": "http://localhost:8000",
+  "prompt_group_id": "f239b999-8136-455c-9201-ae9620c11632",
+  "prompt_ids": [
+    "bdd3c81d-7602-4f44-8679-8779d3944e14"
+  ],
+  "prompt_versions": {
+    "bdd3c81d-7602-4f44-8679-8779d3944e14": [
+      "7878058f-e57b-4bef-a290-deb325ee80a1",
+      "e24df807-1e64-4ad9-9cec-85aa1afb7e7f"
+    ]
+  },
+  "test_runs": {
+    "7878058f-e57b-4bef-a290-deb325ee80a1": [
+      "6c11422f-1eea-4fe3-95e7-c5ccd42e1ce5",
+      "c980c7f8-828a-4a05-977f-31a9811a1615",
+      "053f3ea5-de5d-4958-925c-3bb06b47bdc2"
+    ],
+    "e24df807-1e64-4ad9-9cec-85aa1afb7e7f": [
+      "831917c9-517c-47e5-b4d3-60a281709e40",
+      "c6114f03-eb19-403d-8667-0840c106d345",
+      "a9430460-d1d7-4ba0-a66c-a8d9171d5b2d",
+      "e070b0ac-44c7-4511-a01f-ad7d01dc9114"
+    ]
+  },
+  "test_models": [
+    "deepseek-r1:1.5b",
+    "gemma3:1b"
+  ],
+  "total_test_runs": 7
+}
