@@ -43,7 +43,7 @@ python 01_create_prompts_and_versions.py [options]
 **Purpose:**
 - Loads prompts and versions from script 1
 - Stops unnecessary models
-- Starts test models (deepseek-r1:1.5b, gemma3:1b)
+- Starts test models (llama3.2:1b, gemma3:1b)
 - Runs tests for each version multiple times
 
 **Resource Usage:** Medium (uses test models for inference)

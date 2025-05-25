@@ -20,7 +20,7 @@ Example response:
 ```json
 [
   {
-    "name": "deepseek-r1:1.5b",
+    "name": "llama3.2:1b",
     "is_pulled": true,
     "is_running": true,
     "status_message": "Running"
@@ -49,7 +49,7 @@ curl http://localhost:8000/api/models/running
 ```bash
 curl -X POST http://localhost:8000/api/models/pull \
   -H "Content-Type: application/json" \
-  -d '{"model_name": "deepseek-r1:1.5b"}'
+  -d '{"model_name": "llama3.2:1b"}'
 ```
 
 ### Pull Multiple Models
@@ -57,15 +57,15 @@ curl -X POST http://localhost:8000/api/models/pull \
 curl -X POST http://localhost:8000/api/models/pull/batch \
   -H "Content-Type: application/json" \
   -d '{
-    "models": ["deepseek-r1:1.5b", "gemma3:1b", "llama3.2:1b"]
+    "models": ["llama3.2:1b", "gemma3:1b", "llama3.2:1b"]
   }'
 ```
 Example response:
 ```json
 [
     {
-        "message": "Successfully pulled model: deepseek-r1:1.5b",
-        "model_name": "deepseek-r1:1.5b"
+        "message": "Successfully pulled model: llama3.2:1b",
+        "model_name": "llama3.2:1b"
     },
     {
         "message": "Successfully pulled model: gemma3:1b",
@@ -82,7 +82,7 @@ Example response:
 ```bash
 curl -X POST http://localhost:8000/api/models/start \
   -H "Content-Type: application/json" \
-  -d '{"model_name": "deepseek-r1:1.5b"}'
+  -d '{"model_name": "llama3.2:1b"}'
 ```
 
 ### Start Multiple Models
@@ -90,15 +90,15 @@ curl -X POST http://localhost:8000/api/models/start \
 curl -X POST http://localhost:8000/api/models/start/batch \
   -H "Content-Type: application/json" \
   -d '{
-    "models": ["deepseek-r1:1.5b", "gemma3:1b"]
+    "models": ["llama3.2:1b", "gemma3:1b"]
   }'
 ```
 Example response:
 ```json
 [
     {
-        "message": "Successfully started model: deepseek-r1:1.5b",
-        "model_name": "deepseek-r1:1.5b"
+        "message": "Successfully started model: llama3.2:1b",
+        "model_name": "llama3.2:1b"
     },
     {
         "message": "Model gemma3:1b is not available",
@@ -111,7 +111,7 @@ Example response:
 ```bash
 curl -X POST http://localhost:8000/api/models/stop \
   -H "Content-Type: application/json" \
-  -d '{"model_name": "deepseek-r1:1.5b"}'
+  -d '{"model_name": "llama3.2:1b"}'
 ```
 
 ### Stop Multiple Models
@@ -119,15 +119,15 @@ curl -X POST http://localhost:8000/api/models/stop \
 curl -X POST http://localhost:8000/api/models/stop/batch \
   -H "Content-Type: application/json" \
   -d '{
-    "models": ["deepseek-r1:1.5b", "gemma3:1b"]
+    "models": ["llama3.2:1b", "gemma3:1b"]
   }'
 ```
 Example response:
 ```json
 [
     {
-        "message": "Successfully stopped model: deepseek-r1:1.5b",
-        "model_name": "deepseek-r1:1.5b"
+        "message": "Successfully stopped model: llama3.2:1b",
+        "model_name": "llama3.2:1b"
     },
     {
         "message": "Failed to stop model: gemma3:1b",
@@ -140,7 +140,7 @@ Example response:
 
 ### Process a Prompt with a Specific Model
 ```bash
-curl -X POST http://localhost:8000/api/single/deepseek-r1:1.5b \
+curl -X POST http://localhost:8000/api/single/llama3.2:1b \
   -H "Content-Type: application/json" \
   -d '{"prompt": "What is the capital of France?"}'
 ```
@@ -151,7 +151,7 @@ curl -X POST http://localhost:8000/api/batch \
   -H "Content-Type: application/json" \
   -d '{
     "prompt": "What is the capital of France?",
-    "models": ["deepseek-r1:1.5b", "gemma3:1b"]
+    "models": ["llama3.2:1b", "gemma3:1b"]
   }'
 ```
 Example response:
@@ -159,7 +159,7 @@ Example response:
 {
     "results": [
         {
-            "model": "deepseek-r1:1.5b",
+            "model": "llama3.2:1b",
             "response": "The capital of France is Paris..."
         },
         {
@@ -248,7 +248,7 @@ curl -X POST http://localhost:8000/api/test-runs \
   -H "Content-Type: application/json" \
   -d '{
     "prompt_version_id": "660e8400-e29b-41d4-a716-446655440000",
-    "model_used": "deepseek-r1:1.5b",
+    "model_used": "llama3.2:1b",
     "output": "The capital of France is Paris.",
     "metrics": {
       "latency_ms": 150,
@@ -268,7 +268,7 @@ curl -X POST http://localhost:8000/api/test-runs \
 
 ### Test a Prompt and Save Results
 ```bash
-curl -X POST "http://localhost:8000/api/test-prompt-and-save?version_id=660e8400-e29b-41d4-a716-446655440000&model_name=deepseek-r1:1.5b&prompt=What%20is%20the%20capital%20of%20France?"
+curl -X POST "http://localhost:8000/api/test-prompt-and-save?version_id=660e8400-e29b-41d4-a716-446655440000&model_name=llama3.2:1b&prompt=What%20is%20the%20capital%20of%20France?"
 ```
 
 ### Get Test Runs for a Prompt Version
@@ -280,7 +280,7 @@ Example response:
 [
     {
         "id": "880e8400-e29b-41d4-a716-446655440000",
-        "model_used": "deepseek-r1:1.5b",
+        "model_used": "llama3.2:1b",
         "output": "The capital of France is Paris.",
         "metrics": {
             "latency_ms": 150,
@@ -331,14 +331,14 @@ curl -X POST http://localhost:8000/api/compare-test-runs \
 
 ### Search Test Runs
 ```bash
-curl "http://localhost:8000/api/search-test-runs?query=Paris&model=deepseek-r1:1.5b"
+curl "http://localhost:8000/api/search-test-runs?query=Paris&model=llama3.2:1b"
 ```
 Example response:
 ```json
 [
     {
         "id": "880e8400-e29b-41d4-a716-446655440000",
-        "model_used": "deepseek-r1:1.5b",
+        "model_used": "llama3.2:1b",
         "output": "The capital of France is Paris.",
         "metrics": {
             "latency_ms": 150,
@@ -586,6 +586,6 @@ curl -X POST http://localhost:8000/api/run-tests \
   -H "Content-Type: application/json" \
   -d '{
     "prompt_version_ids": ["<VERSION_ID_1>", "<VERSION_ID_2>", "<VERSION_ID_3>"],
-    "models": ["deepseek-r1:1.5b"]
+    "models": ["llama3.2:1b"]
   }'
 ```

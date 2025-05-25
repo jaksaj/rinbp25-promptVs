@@ -62,7 +62,7 @@ class E2ETestRunner:
         self.config = self._load_config()
         
         # Models to use for testing
-        self.test_models = ["deepseek-r1:1.5b", "gemma3:1b"]
+        self.test_models = ["llama3.2:1b", "gemma3:1b"]
         self.evaluation_model = "gemma3:4b"
         
     def _load_config(self) -> Dict:

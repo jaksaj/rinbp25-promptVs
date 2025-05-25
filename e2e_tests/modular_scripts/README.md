@@ -140,7 +140,7 @@ Each script automatically:
 ## Model Usage by Script
 
 - **Script 1:** `gemma3:1b` (lightweight model for prompt generation)
-- **Script 2:** `deepseek-r1:1.5b`, `gemma3:1b` (test models)
+- **Script 2:** `llama3.2:1b`, `gemma3:1b` (test models)
 - **Script 3:** `gemma3:4b` (evaluation model for quality comparisons)
 
 ## Output Files

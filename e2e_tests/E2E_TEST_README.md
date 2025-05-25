@@ -33,7 +33,7 @@ The end-to-end test performs the following steps:
 
 5. **Run Test Runs**
    - Executes each prompt version 2 times with different models
-   - Uses models: `deepseek-r1:1.5b`, `gemma3:1b`
+   - Uses models: `llama3.2:1b`, `gemma3:1b`
    - Total test runs: 2 prompts × 2 versions × 2 models × 2 runs = 16 test runs
 
 6. **Evaluate Results**
@@ -144,7 +144,7 @@ The test generates several output files:
     "total_test_runs": 16,
     "total_evaluations": 16,
     "total_comparisons": 8,
-    "models_tested": ["deepseek-r1:1.5b", "gemma3:1b"],
+    "models_tested": ["llama3.2:1b", "gemma3:1b"],
     "evaluation_model": "gemma3:4b"
   },
   "technique_performance": {

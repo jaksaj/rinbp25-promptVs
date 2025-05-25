@@ -92,7 +92,7 @@ Each prompt gets transformed using:
 
 ## Test Models
 
-- **Test Models**: `deepseek-r1:1.5b`, `gemma3:1b`
+- **Test Models**: `llama3.2:1b`, `gemma3:1b`
 - **Evaluation Model**: `gemma3:4b`
 
 ## Expected Output
