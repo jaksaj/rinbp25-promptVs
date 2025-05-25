@@ -1,0 +1,22 @@
+{
+  "prompt_group": {
+    "name": "E2E Test Prompt Group",
+    "description": "Prompt group for end-to-end testing",
+    "tags": ["e2e", "testing", "automation"]
+  },  "prompts": [
+    {
+      "name": "Graph BFS from A",
+      "description": "Perform breadth-first search on a directed graph",
+      "content": "You will be given a list of directed edges and an operation to perform.\nFor BFS, return only the nodes reached at the specified depth (not the starting node).\nFor parents, return only nodes with edges pointing to the given node (not the node itself).\nThe graph has the following edges:\nA -> B\nA -> C\nB -> D\nOperation:\nPerform a BFS from node A with depth 1.",
+      "expected_solution": "[B, C]",
+      "tags": ["graph", "bfs", "algorithms"]
+    },
+    {
+      "name": "Graph BFS from B",
+      "description": "Perform breadth-first search on a directed graph",
+      "content": "You will be given a list of directed edges and an operation to perform.\nFor BFS, return only the nodes reached at the specified depth (not the starting node).\nFor parents, return only nodes with edges pointing to the given node (not the node itself).\nThe graph has the following edges:\nA -> B\nA -> C\nB -> D\nOperation:\nPerform a BFS from node B with depth 1.",
+      "expected_solution": "[D]",
+      "tags": ["graph", "bfs", "algorithms"]
+    }
+  ]
+}
