@@ -37,3 +37,6 @@ ENV/
 
 # Local development
 .DS_Store 
+
+# ignore JSON files in e2e_tests/output
+e2e_tests/output/*.json
