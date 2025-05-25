@@ -57,6 +57,8 @@ class ABTestingEvaluator:
     """
     Evaluates test runs using A/B testing and an ELO rating system.
     """
+      # Retry configuration
+    MAX_RETRIES = 3
     
     def __init__(self, ollama_service: OllamaService, evaluation_model: str = "gemma3:4b", neo4j_service: Optional[Neo4jService] = None):
         """
@@ -160,55 +162,37 @@ Only return the JSON object, with no other text.
 """
 
         try:
-            # Process the comparison prompt
-            result = self.ollama_service.process_prompt(prompt, self.evaluation_model)
+            # Process the comparison prompt with retry logic
+            comparison = await self._evaluate_with_retry(prompt)
             
-            # Parse the result
-            try:
-                result = result.strip()
+            # Map "A" or "B" to the actual test run IDs
+            winner_key = comparison.get("winner", "").upper()
+            if winner_key == "A":
+                winner_test_run_id = test_run_id1
+            elif winner_key == "B":
+                winner_test_run_id = test_run_id2
+            else:
+                raise ValueError(f"Invalid winner value: {winner_key}")
+            
+            # Create comparison result data
+            comparison_data = {
+                "test_run_id1": test_run_id1,
+                "test_run_id2": test_run_id2,
+                "winner_test_run_id": winner_test_run_id,
+                "explanation": comparison.get("explanation", ""),
+                "compare_within_version": compare_within_version
+            }
+            
+            # Save to database
+            if self.neo4j_service:
+                comparison_result = self.neo4j_service.create_comparison_result(comparison_data)
                 
-                # Handle case where JSON might be embedded in a code block
-                if "```json" in result:
-                    json_content = result.split("```json")[1].split("```")[0].strip()
-                    comparison = json.loads(json_content)
-                elif "```" in result:
-                    json_content = result.split("```")[1].strip()
-                    comparison = json.loads(json_content)
-                else:
-                    comparison = json.loads(result)
+                # Update ELO ratings
+                self._update_elo_ratings(test_run_id1, test_run_id2, winner_test_run_id, compare_within_version)
                 
-                # Map "A" or "B" to the actual test run IDs
-                winner_key = comparison.get("winner", "").upper()
-                if winner_key == "A":
-                    winner_test_run_id = test_run_id1
-                elif winner_key == "B":
-                    winner_test_run_id = test_run_id2
-                else:
-                    raise ValueError(f"Invalid winner value: {winner_key}")
-                
-                # Create comparison result data
-                comparison_data = {
-                    "test_run_id1": test_run_id1,
-                    "test_run_id2": test_run_id2,
-                    "winner_test_run_id": winner_test_run_id,
-                    "explanation": comparison.get("explanation", ""),
-                    "compare_within_version": compare_within_version
-                }
-                
-                # Save to database
-                if self.neo4j_service:
-                    comparison_result = self.neo4j_service.create_comparison_result(comparison_data)
-                    
-                    # Update ELO ratings
-                    self._update_elo_ratings(test_run_id1, test_run_id2, winner_test_run_id, compare_within_version)
-                    
-                    return comparison_result
-                
-                return comparison_data
-                
-            except (json.JSONDecodeError, ValueError) as e:
-                logger.error(f"Error parsing comparison result: {str(e)}")
-                raise ValueError(f"Failed to parse comparison result: {str(e)}")
+                return comparison_result
+            
+            return comparison_data
                 
         except Exception as e:
             logger.error(f"Error during test run comparison: {str(e)}")
@@ -397,3 +381,188 @@ Only return the JSON object, with no other text.
                 best_prompt_version_id = version_id
         
         return best_prompt_version_id
+    
+    async def _evaluate_with_retry(self, prompt: str, attempt: int = 1) -> Dict[str, Any]:
+        """
+        Evaluate the comparison prompt with retry logic for handling invalid model outputs.
+        
+        Args:
+            prompt: The comparison prompt to send to the model
+            attempt: Current attempt number (1-based)
+            
+        Returns:
+            Parsed comparison result dictionary
+            
+        Raises:
+            ValueError: If all retry attempts fail
+        """
+        try:
+            # Process the comparison prompt
+            result = self.ollama_service.process_prompt(prompt, self.evaluation_model)
+            
+            # Parse the result
+            result = result.strip()
+            
+            # Handle case where JSON might be embedded in a code block
+            if "```json" in result:
+                json_content = result.split("```json")[1].split("```")[0].strip()
+                comparison = json.loads(json_content)
+            elif "```" in result:
+                json_content = result.split("```")[1].strip()
+                comparison = json.loads(json_content)
+            else:
+                comparison = json.loads(result)
+              # Validate the response structure
+            winner = comparison.get("winner", "").upper()
+            if winner not in ["A", "B"]:
+                raise ValueError(f"Invalid winner value: {winner}. Must be 'A' or 'B'")
+            
+            if not comparison.get("explanation"):
+                raise ValueError("Missing explanation in comparison result")
+            
+            return comparison
+            
+        except (json.JSONDecodeError, ValueError, KeyError) as e:
+            logger.warning(f"Attempt {attempt} failed: {str(e)}")
+            
+            if attempt >= self.MAX_RETRIES:
+                logger.error(f"All {self.MAX_RETRIES} attempts failed for model evaluation")
+                raise ValueError(f"Failed to get valid comparison result after {self.MAX_RETRIES} attempts. Last error: {str(e)}")
+            
+            # Create a more explicit prompt for retry attempts
+            if attempt == 1:
+                # First retry: make the prompt more explicit
+                retry_prompt = self._create_explicit_comparison_prompt(prompt)
+            else:
+                # Subsequent retries: use even more structured approach
+                retry_prompt = self._create_structured_comparison_prompt(prompt)
+            
+            return await self._evaluate_with_retry(retry_prompt, attempt + 1)
+    
+    def _create_explicit_comparison_prompt(self, original_prompt: str) -> str:
+        """Create a more explicit version of the comparison prompt for retry attempts."""
+        # Extract the core content from the original prompt
+        lines = original_prompt.split('\n')
+        prompt_section = ""
+        solution_section = ""
+        response_a_section = ""
+        response_b_section = ""
+        
+        current_section = None
+        for line in lines:
+            if "ORIGINAL PROMPT:" in line:
+                current_section = "prompt"
+                continue
+            elif "EXPECTED SOLUTION" in line:
+                current_section = "solution"
+                continue
+            elif "RESPONSE A:" in line:
+                current_section = "response_a"
+                continue
+            elif "RESPONSE B:" in line:
+                current_section = "response_b"
+                continue
+            elif "Compare the two responses" in line:
+                break
+                
+            if current_section == "prompt":
+                prompt_section += line + "\n"
+            elif current_section == "solution":
+                solution_section += line + "\n"
+            elif current_section == "response_a":
+                response_a_section += line + "\n"
+            elif current_section == "response_b":
+                response_b_section += line + "\n"
+        
+        return f"""You must evaluate two AI responses and return ONLY a JSON object.
+
+TASK: Compare Response A and Response B to determine which better answers the original prompt.
+
+ORIGINAL PROMPT:
+{prompt_section.strip()}
+
+EXPECTED SOLUTION:
+{solution_section.strip()}
+
+RESPONSE A:
+{response_a_section.strip()}
+
+RESPONSE B:
+{response_b_section.strip()}
+
+INSTRUCTIONS:
+1. Determine which response (A or B) better answers the original prompt
+2. Consider: accuracy, completeness, clarity, relevance, usefulness
+3. Return ONLY the JSON object below with your evaluation
+
+REQUIRED JSON FORMAT:
+{{
+    "winner": "A",
+    "explanation": "Detailed explanation of why this response is better"
+}}
+
+IMPORTANT: 
+- The "winner" field must be exactly "A" or "B" (nothing else)
+- The "explanation" field must contain a detailed justification
+- Return ONLY the JSON object, no other text
+"""
+    
+    def _create_structured_comparison_prompt(self, original_prompt: str) -> str:
+        """Create a highly structured version of the comparison prompt for final retry attempts."""
+        # Extract content same as above but with even more structure
+        lines = original_prompt.split('\n')
+        prompt_section = ""
+        solution_section = ""
+        response_a_section = ""
+        response_b_section = ""
+        
+        current_section = None
+        for line in lines:
+            if "ORIGINAL PROMPT:" in line:
+                current_section = "prompt"
+                continue
+            elif "EXPECTED SOLUTION" in line:
+                current_section = "solution"
+                continue
+            elif "RESPONSE A:" in line:
+                current_section = "response_a"
+                continue
+            elif "RESPONSE B:" in line:
+                current_section = "response_b"
+                continue
+            elif "Compare the two responses" in line:
+                break
+                
+            if current_section == "prompt":
+                prompt_section += line + "\n"
+            elif current_section == "solution":
+                solution_section += line + "\n"
+            elif current_section == "response_a":
+                response_a_section += line + "\n"
+            elif current_section == "response_b":
+                response_b_section += line + "\n"
+        
+        return f"""EVALUATION TASK
+
+Step 1: Read the original prompt
+{prompt_section.strip()}
+
+Step 2: Review the expected solution
+{solution_section.strip()}
+
+Step 3: Analyze Response A
+{response_a_section.strip()}
+
+Step 4: Analyze Response B  
+{response_b_section.strip()}
+
+Step 5: Choose the better response (A or B)
+
+Step 6: Output ONLY this JSON format:
+{{"winner": "A", "explanation": "Your detailed explanation here"}}
+
+Rules:
+- winner must be "A" or "B" only
+- explanation must be detailed
+- No text outside the JSON
+"""
