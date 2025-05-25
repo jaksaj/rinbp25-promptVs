@@ -1,7 +1,0 @@
-name,instruction
-plain,Answer the question directly without any additional context.
-formal,Please answer the following question thoroughly and accurately. Provide complete sentences and proper explanations.
-stepbystep,Think through this problem step-by-step. First identify what's being asked, then break down your reasoning process clearly before providing the final answer.
-expert,As an expert in this field, provide a comprehensive and nuanced answer that demonstrates deep knowledge. Reference relevant principles or theories when appropriate.
-concise,Provide a brief, efficient answer that captures only the essential information requested. Avoid unnecessary details.
-creative,Approach this question from a creative angle. Consider unusual perspectives or connections that might lead to insightful answers.
