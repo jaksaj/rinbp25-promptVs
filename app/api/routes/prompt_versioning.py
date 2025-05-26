@@ -172,6 +172,23 @@ async def create_test_run(
         logger.error(f"Error creating test run: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/test-runs/{test_run_id}", response_model=Dict[str, Any])
+async def get_test_run(
+    test_run_id: str,
+    neo4j_service: Neo4jService = Depends(get_neo4j_service)
+):
+    """Get a specific test run by ID."""
+    try:
+        test_run = neo4j_service.get_test_run(test_run_id)
+        if not test_run:
+            raise HTTPException(status_code=404, detail=f"Test run with ID {test_run_id} not found")
+        return test_run
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting test run: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/prompt-versions/{version_id}/test-runs", response_model=List[Dict[str, Any]])
 async def get_test_runs(
     version_id: str,
