@@ -41,3 +41,7 @@ ENV/
 # JSON files
 e2e_tests/output/*.json
 graph/*.json
+e2e_tests/modular_scripts/elo_analysis_reports/*.json
+
+e2e_tests/modular_scripts/elo_analysis_reports/*.md
+

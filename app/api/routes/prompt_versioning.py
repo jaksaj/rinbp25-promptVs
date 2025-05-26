@@ -11,7 +11,9 @@ from app.api.models.prompt import (
     TestRunResponse,
     TestRunMetrics,
     PromptComparisonRequest,
-    TestRunComparisonResponse
+    TestRunComparisonResponse,
+    BulkPromptVersionMetadataRequest,
+    BulkPromptVersionMetadataResponse
 )
 from app.core.dependencies import get_neo4j_service, get_ollama_service
 from app.services.neo4j import Neo4jService
@@ -158,6 +160,23 @@ async def get_prompt_version(
         logger.error(f"Error getting prompt version: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/prompt-versions/bulk", response_model=BulkPromptVersionMetadataResponse)
+async def get_bulk_prompt_version_metadata(
+    request: BulkPromptVersionMetadataRequest,
+    neo4j_service: Neo4jService = Depends(get_neo4j_service)
+):
+    """Get metadata for multiple prompt versions in bulk."""
+    try:
+        results = []
+        for version_id in request.version_ids:
+            version = neo4j_service.get_prompt_version(version_id)
+            if version:
+                results.append(version)
+        return BulkPromptVersionMetadataResponse(results=results, total=len(results))
+    except Exception as e:
+        logger.error(f"Error in get_bulk_prompt_version_metadata: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # TestRun endpoints
 @router.post("/test-runs", response_model=Dict[str, str])
 async def create_test_run(
@@ -177,11 +196,15 @@ async def get_test_run(
     test_run_id: str,
     neo4j_service: Neo4jService = Depends(get_neo4j_service)
 ):
-    """Get a specific test run by ID."""
+    """Get a specific test run by ID, including prompt_version_id."""
     try:
         test_run = neo4j_service.get_test_run(test_run_id)
         if not test_run:
             raise HTTPException(status_code=404, detail=f"Test run with ID {test_run_id} not found")
+        # Add prompt_version_id if not already present
+        if "prompt_version_id" not in test_run or not test_run["prompt_version_id"]:
+            prompt_version_id = neo4j_service.get_prompt_version_id_for_test_run(test_run_id)
+            test_run["prompt_version_id"] = prompt_version_id
         return test_run
     except HTTPException:
         raise

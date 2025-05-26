@@ -15,7 +15,12 @@ def get_ollama_service() -> OllamaService:
 
 def get_neo4j_service() -> Neo4jService:
     """Dependency function to get the shared Neo4jService instance."""
-    return neo4j_service
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.debug("get_neo4j_service called")
+    service = Neo4jService()
+    logger.debug(f"get_neo4j_service returning: {service}")
+    return service
 
 def get_prompt_generator() -> PromptGenerator:
     """Dependency function to get the shared PromptGenerator instance."""

@@ -8,7 +8,9 @@ from app.api.models.prompt import (
     ComparisonResult,
     BatchComparisonRequest,
     BatchComparisonResponse,
-    EloRatingResult
+    EloRatingResult,
+    BulkEloRatingsRequest,
+    BulkEloRatingsResponse
 )
 from datetime import datetime
 import uuid
@@ -85,6 +87,31 @@ async def batch_compare_test_runs(
         logger.error(f"Error in batch_compare_test_runs: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/elo-ratings/bulk", response_model=BulkEloRatingsResponse)
+async def get_bulk_elo_ratings(
+    request: BulkEloRatingsRequest,
+    neo4j_service: Neo4jService = Depends(get_neo4j_service)
+):
+    """
+    Get ELO ratings for multiple test run IDs in bulk.
+    """
+    try:
+        ratings = neo4j_service.get_bulk_elo_ratings(request.test_run_ids)
+        results = []
+        for elo_rating in ratings:
+            results.append(EloRatingResult(
+                id=elo_rating.get("id"),
+                test_run_id=elo_rating.get("test_run_id"),
+                elo_score=elo_rating.get("elo_score", 1000),
+                version_elo_score=elo_rating.get("version_elo_score", 1000),
+                global_elo_score=elo_rating.get("global_elo_score", 1000),
+                updated_at=elo_rating.get("updated_at", datetime.now())
+            ))
+        return BulkEloRatingsResponse(results=results, total=len(results))
+    except Exception as e:
+        logger.error(f"Error in get_bulk_elo_ratings: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/elo-rating/{test_run_id}", response_model=EloRatingResult)
 async def get_elo_rating(
     test_run_id: str,
@@ -96,7 +123,9 @@ async def get_elo_rating(
     try:
         # Get the ELO rating from the database
         elo_rating = neo4j_service.get_elo_rating(test_run_id)
-        
+        logger.debug(f"ELO rating raw result for test_run_id={test_run_id}: {elo_rating}")
+        if elo_rating and "updated_at" in elo_rating:
+            logger.debug(f"ELO rating updated_at type: {type(elo_rating['updated_at'])}, value: {elo_rating['updated_at']}")
         if not elo_rating:
             raise HTTPException(status_code=404, detail=f"ELO rating for test run {test_run_id} not found")
         
@@ -207,4 +236,23 @@ async def get_comparisons_for_test_run(
         return comparisons
     except Exception as e:
         logger.error(f"Error getting comparisons: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/comparisons/bulk")
+async def get_bulk_comparison_results(
+    request: dict,  # expects {"test_run_ids": [...]}
+    neo4j_service: Neo4jService = Depends(get_neo4j_service)
+):
+    """Get all comparison results for a list of test run IDs in bulk."""
+    try:
+        all_comparisons = []
+        for test_run_id in request.get("test_run_ids", []):
+            comparisons = neo4j_service.get_comparison_results(test_run_id)
+            if isinstance(comparisons, list):
+                all_comparisons.extend(comparisons)
+            elif comparisons:
+                all_comparisons.append(comparisons)
+        return {"results": all_comparisons, "total": len(all_comparisons)}
+    except Exception as e:
+        logger.error(f"Error in get_bulk_comparison_results: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
