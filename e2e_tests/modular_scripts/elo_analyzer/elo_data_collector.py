@@ -8,7 +8,7 @@ Handles data collection from the API for ELO rating analysis.
 
 import logging
 import requests
-from typing import Dict, List, Any, Optional
+from typing import Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -108,27 +108,6 @@ class EloDataCollector:
         logger.info(f"Prompt version metadata collected: {successful_requests} successful, {failed_requests} failed")
         return prompt_versions
     
-    def collect_prompt_metadata(self, prompt_ids: List[str]) -> Dict[str, Dict]:
-        """Collect prompt metadata"""
-        logger.info(f"Collecting prompt metadata for {len(prompt_ids)} prompts...")
-        
-        prompts = {}
-        successful_requests = 0
-        failed_requests = 0
-        
-        for prompt_id in prompt_ids:
-            try:
-                response = self._make_request('GET', f'/prompts/{prompt_id}')
-                prompt_data = response.json()
-                prompts[prompt_id] = prompt_data
-                successful_requests += 1
-            except Exception as e:
-                logger.warning(f"Failed to get prompt metadata for {prompt_id}: {e}")
-                failed_requests += 1
-        
-        logger.info(f"Prompt metadata collected: {successful_requests} successful, {failed_requests} failed")
-        return prompts
-    
     def collect_comparison_results(self, test_run_ids: List[str]) -> List[Dict]:
         """Collect comparison results for test runs"""
         logger.info(f"Collecting comparison results for {len(test_run_ids)} test runs...")
@@ -148,42 +127,3 @@ class EloDataCollector:
         
         logger.info(f"Collected {len(all_comparisons)} comparison results")
         return all_comparisons
-    
-    def collect_comprehensive_data(self, input_data: Dict) -> Dict[str, Any]:
-        """Collect all necessary data for ELO analysis"""
-        logger.info("Starting comprehensive data collection...")
-        # Extract test run IDs from input data
-        all_test_run_ids = []
-        for version_runs in input_data.get('test_runs', {}).values():
-            all_test_run_ids.extend(version_runs)
-        # Extract version IDs (should be prompt_version_id from test run metadata, not test run ids)
-        all_version_ids = []
-        test_run_metadata = self.collect_test_run_metadata(all_test_run_ids)
-        for test_run in test_run_metadata.values():
-            breakpoint()
-            pv_id = test_run.get('prompt_version_id')
-            breakpoint()
-            if pv_id:
-                all_version_ids.append(pv_id)
-                breakpoint()
-        logger.info(f"Prompt version IDs to fetch: {all_version_ids}")
-        # Extract prompt IDs
-        prompt_ids = input_data.get('prompt_ids', [])
-        breakpoint()
-        # Collect all data
-        comprehensive_data = {
-            'input_metadata': input_data,
-            'elo_ratings': self.collect_all_elo_ratings(all_test_run_ids),
-            'test_runs': test_run_metadata,
-            'prompt_versions': self.collect_prompt_version_metadata(all_version_ids),
-            'prompts': self.collect_prompt_metadata(prompt_ids),
-            'comparison_results': self.collect_comparison_results(all_test_run_ids),
-            'collection_summary': {
-                'total_test_runs': len(all_test_run_ids),
-                'total_versions': len(all_version_ids),
-                'total_prompts': len(prompt_ids)
-            }
-        }
-        
-        logger.info("Comprehensive data collection completed")
-        return comprehensive_data
