@@ -177,11 +177,15 @@ async def get_test_run(
     test_run_id: str,
     neo4j_service: Neo4jService = Depends(get_neo4j_service)
 ):
-    """Get a specific test run by ID."""
+    """Get a specific test run by ID, including prompt_version_id."""
     try:
         test_run = neo4j_service.get_test_run(test_run_id)
         if not test_run:
             raise HTTPException(status_code=404, detail=f"Test run with ID {test_run_id} not found")
+        # Add prompt_version_id if not already present
+        if "prompt_version_id" not in test_run or not test_run["prompt_version_id"]:
+            prompt_version_id = neo4j_service.get_prompt_version_id_for_test_run(test_run_id)
+            test_run["prompt_version_id"] = prompt_version_id
         return test_run
     except HTTPException:
         raise

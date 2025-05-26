@@ -964,3 +964,22 @@ class Neo4jService:
         except Exception as e:
             logger.error(f"Error getting all ELO ratings: {str(e)}")
             raise
+
+    def get_prompt_version_id_for_test_run(self, test_run_id: str) -> Optional[str]:
+        """
+        Get the prompt version ID for a given test run by following the TESTED_WITH relationship.
+        """
+        try:
+            with self.driver.session(database=NEO4J_DATABASE) as session:
+                result = session.run(
+                    """
+                    MATCH (tr:TestRun {id: $test_run_id})-[:TESTED_WITH]->(pv:PromptVersion)
+                    RETURN pv.id AS prompt_version_id
+                    """,
+                    test_run_id=test_run_id
+                )
+                record = result.single()
+                return record["prompt_version_id"] if record else None
+        except Exception as e:
+            logger.error(f"Error getting prompt version id for test run: {str(e)}")
+            return None

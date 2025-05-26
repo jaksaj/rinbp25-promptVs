@@ -225,7 +225,8 @@ class StatisticalAnalyzer:
     
     def _get_technique_from_version(self, version_id: str, input_data: Dict) -> Optional[str]:
         """Determine technique from version ID"""
-        # Find which prompt this version belongs to and its index
+        if not isinstance(input_data, dict):
+            return None
         for prompt_id, version_list in input_data.get('prompt_versions', {}).items():
             if version_id in version_list:
                 version_index = version_list.index(version_id)

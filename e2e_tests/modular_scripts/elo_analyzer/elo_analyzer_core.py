@@ -95,12 +95,20 @@ class EloAnalyzer:
         
         # Collect ELO ratings
         elo_ratings = self.data_collector.collect_all_elo_ratings(test_run_ids)
-          # Collect metadata for valid test runs
+        # Collect metadata for valid test runs
         valid_test_runs = [tid for tid, data in elo_ratings.items() if not data.get('missing_data', False)]
         metadata = self.data_collector.collect_test_run_metadata(valid_test_runs)
-        
+
+        # Extract prompt version IDs from metadata
+        prompt_version_ids = []
+        for test_run in metadata.values():
+            pv_id = test_run.get('prompt_version_id')
+            if pv_id:
+                prompt_version_ids.append(pv_id)
+        logger.info(f"Prompt version IDs to fetch: {prompt_version_ids}")
+
         # Collect prompt version data
-        prompt_versions = self.data_collector.collect_prompt_version_metadata(metadata)
+        prompt_versions = self.data_collector.collect_prompt_version_metadata(prompt_version_ids)
         
         # Collect comparison results for context
         comparison_results = self.data_collector.collect_comparison_results(valid_test_runs)

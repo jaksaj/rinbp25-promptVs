@@ -152,25 +152,29 @@ class EloDataCollector:
     def collect_comprehensive_data(self, input_data: Dict) -> Dict[str, Any]:
         """Collect all necessary data for ELO analysis"""
         logger.info("Starting comprehensive data collection...")
-        
         # Extract test run IDs from input data
         all_test_run_ids = []
         for version_runs in input_data.get('test_runs', {}).values():
             all_test_run_ids.extend(version_runs)
-        
-        # Extract version IDs
+        # Extract version IDs (should be prompt_version_id from test run metadata, not test run ids)
         all_version_ids = []
-        for prompt_versions in input_data.get('prompt_versions', {}).values():
-            all_version_ids.extend(prompt_versions)
-        
+        test_run_metadata = self.collect_test_run_metadata(all_test_run_ids)
+        for test_run in test_run_metadata.values():
+            breakpoint()
+            pv_id = test_run.get('prompt_version_id')
+            breakpoint()
+            if pv_id:
+                all_version_ids.append(pv_id)
+                breakpoint()
+        logger.info(f"Prompt version IDs to fetch: {all_version_ids}")
         # Extract prompt IDs
         prompt_ids = input_data.get('prompt_ids', [])
-        
+        breakpoint()
         # Collect all data
         comprehensive_data = {
             'input_metadata': input_data,
             'elo_ratings': self.collect_all_elo_ratings(all_test_run_ids),
-            'test_runs': self.collect_test_run_metadata(all_test_run_ids),
+            'test_runs': test_run_metadata,
             'prompt_versions': self.collect_prompt_version_metadata(all_version_ids),
             'prompts': self.collect_prompt_metadata(prompt_ids),
             'comparison_results': self.collect_comparison_results(all_test_run_ids),

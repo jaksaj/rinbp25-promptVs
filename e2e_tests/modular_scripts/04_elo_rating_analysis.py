@@ -383,11 +383,18 @@ def run_analysis(args: argparse.Namespace) -> bool:
         
         # Initialize analyzer
         logger.info(f"Initializing ELO analyzer with API: {args.api_url}")
-        analyzer = EloAnalyzer(args.api_url, args.output_dir)
+        # Ensure API URL uses /api as base path
+        if args.api_url.rstrip("/").endswith(":8000"):
+            api_url = args.api_url.rstrip("/") + "/api"
+        elif not args.api_url.rstrip("/").endswith("/api"):
+            api_url = args.api_url.rstrip("/") + "/api"
+        else:
+            api_url = args.api_url.rstrip("/")
+        analyzer = EloAnalyzer(api_url, args.output_dir)
         
         # Run comprehensive analysis
         print(f"\nStarting comprehensive ELO analysis for {len(test_runs)} test runs...")
-        print(f"API URL: {args.api_url}")
+        print(f"API URL: {api_url}")
         print(f"Output directory: {args.output_dir}")
         
         results = analyzer.run_comprehensive_analysis(test_runs)

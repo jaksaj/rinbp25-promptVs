@@ -96,7 +96,9 @@ async def get_elo_rating(
     try:
         # Get the ELO rating from the database
         elo_rating = neo4j_service.get_elo_rating(test_run_id)
-        
+        logger.debug(f"ELO rating raw result for test_run_id={test_run_id}: {elo_rating}")
+        if elo_rating and "updated_at" in elo_rating:
+            logger.debug(f"ELO rating updated_at type: {type(elo_rating['updated_at'])}, value: {elo_rating['updated_at']}")
         if not elo_rating:
             raise HTTPException(status_code=404, detail=f"ELO rating for test run {test_run_id} not found")
         

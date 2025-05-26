@@ -1,15 +1,113 @@
 {
   "prompt_group": {
-    "name": "E2E Test Prompt Group",
-    "description": "Prompt group for end-to-end testing",
-    "tags": ["e2e", "testing", "automation"]
-  },  "prompts": [
+    "name": "Generated Graph Test Prompts",
+    "description": "Auto-generated graph prompts with 3 graphs and 3 questions each",
+    "tags": [
+      "graph",
+      "algorithms",
+      "generated",
+      "testing"
+    ]
+  },
+  "prompts": [
     {
       "name": "Graph BFS from A",
       "description": "Perform breadth-first search on a directed graph",
-      "content": "You will be given a list of directed edges and an operation to perform.\nFor BFS, return only the nodes reached at the specified depth (not the starting node).\nFor parents, return only nodes with edges pointing to the given node (not the node itself).\nThe graph has the following edges:\nA -> B\nA -> C\nB -> D\nOperation:\nPerform a BFS from node A with depth 1.",
-      "expected_solution": "[B, C]",
-      "tags": ["graph", "bfs", "algorithms"]
+      "content": "You will be given a list of directed edges and an operation to perform.\nFor BFS, return only the nodes reached at the specified depth (not the starting node).\nFor parents, return only nodes with edges pointing to the given node (not the node itself).\nThe graph has the following edges:\nA -> B\nB -> C\nC -> D\nOperation:\nPerform a BFS from node A with depth 3.",
+      "expected_solution": "['D']",
+      "tags": [
+        "graph",
+        "bfs",
+        "algorithms"
+      ]
+    },
+    {
+      "name": "Find parents of A",
+      "description": "Find all parent nodes of a given node",
+      "content": "You will be given a list of directed edges and an operation to perform.\nFor BFS, return only the nodes reached at the specified depth (not the starting node).\nFor parents, return only nodes with edges pointing to the given node (not the node itself).\nThe graph has the following edges:\nA -> B\nB -> C\nC -> D\nOperation:\nFind all parent nodes of A.",
+      "expected_solution": "[]",
+      "tags": [
+        "graph",
+        "parents",
+        "algorithms"
+      ]
+    },
+    {
+      "name": "Reachable nodes from B",
+      "description": "Find all nodes reachable from a given starting node",
+      "content": "You will be given a list of directed edges and an operation to perform.\nFor reachable, return all nodes that can be reached from the starting node (not the starting node itself).\nThe graph has the following edges:\nA -> B\nB -> C\nC -> D\nOperation:\nFind all nodes reachable from B.",
+      "expected_solution": "['C', 'D']",
+      "tags": [
+        "graph",
+        "reachable",
+        "algorithms"
+      ]
+    },
+    {
+      "name": "Graph BFS from F",
+      "description": "Perform breadth-first search on a directed graph",
+      "content": "You will be given a list of directed edges and an operation to perform.\nFor BFS, return only the nodes reached at the specified depth (not the starting node).\nFor parents, return only nodes with edges pointing to the given node (not the node itself).\nThe graph has the following edges:\nA -> B\nB -> C\nC -> D\nD -> E\nE -> F\nF -> G\nB -> G\nF -> C\nOperation:\nPerform a BFS from node F with depth 3.",
+      "expected_solution": "['E']",
+      "tags": [
+        "graph",
+        "bfs",
+        "algorithms"
+      ]
+    },
+    {
+      "name": "Find parents of E",
+      "description": "Find all parent nodes of a given node",
+      "content": "You will be given a list of directed edges and an operation to perform.\nFor BFS, return only the nodes reached at the specified depth (not the starting node).\nFor parents, return only nodes with edges pointing to the given node (not the node itself).\nThe graph has the following edges:\nA -> B\nB -> C\nC -> D\nD -> E\nE -> F\nF -> G\nB -> G\nF -> C\nOperation:\nFind all parent nodes of E.",
+      "expected_solution": "['D']",
+      "tags": [
+        "graph",
+        "parents",
+        "algorithms"
+      ]
+    },
+    {
+      "name": "Reachable nodes from B",
+      "description": "Find all nodes reachable from a given starting node",
+      "content": "You will be given a list of directed edges and an operation to perform.\nFor reachable, return all nodes that can be reached from the starting node (not the starting node itself).\nThe graph has the following edges:\nA -> B\nB -> C\nC -> D\nD -> E\nE -> F\nF -> G\nB -> G\nF -> C\nOperation:\nFind all nodes reachable from B.",
+      "expected_solution": "['C', 'D', 'E', 'F', 'G']",
+      "tags": [
+        "graph",
+        "reachable",
+        "algorithms"
+      ]
+    },
+    {
+      "name": "Graph BFS from F",
+      "description": "Perform breadth-first search on a directed graph",
+      "content": "You will be given a list of directed edges and an operation to perform.\nFor BFS, return only the nodes reached at the specified depth (not the starting node).\nFor parents, return only nodes with edges pointing to the given node (not the node itself).\nThe graph has the following edges:\nA -> B\nB -> C\nC -> D\nD -> E\nE -> F\nF -> G\nD -> F\nC -> A\nOperation:\nPerform a BFS from node F with depth 1.",
+      "expected_solution": "['G']",
+      "tags": [
+        "graph",
+        "bfs",
+        "algorithms"
+      ]
+    },
+    {
+      "name": "Find parents of D",
+      "description": "Find all parent nodes of a given node",
+      "content": "You will be given a list of directed edges and an operation to perform.\nFor BFS, return only the nodes reached at the specified depth (not the starting node).\nFor parents, return only nodes with edges pointing to the given node (not the node itself).\nThe graph has the following edges:\nA -> B\nB -> C\nC -> D\nD -> E\nE -> F\nF -> G\nD -> F\nC -> A\nOperation:\nFind all parent nodes of D.",
+      "expected_solution": "['C']",
+      "tags": [
+        "graph",
+        "parents",
+        "algorithms"
+      ]
+    },
+    {
+      "name": "Reachable nodes from A",
+      "description": "Find all nodes reachable from a given starting node",
+      "content": "You will be given a list of directed edges and an operation to perform.\nFor reachable, return all nodes that can be reached from the starting node (not the starting node itself).\nThe graph has the following edges:\nA -> B\nB -> C\nC -> D\nD -> E\nE -> F\nF -> G\nD -> F\nC -> A\nOperation:\nFind all nodes reachable from A.",
+      "expected_solution": "['B', 'C', 'D', 'E', 'F', 'G']",
+      "tags": [
+        "graph",
+        "reachable",
+        "algorithms"
+      ]
     }
   ]
 }
