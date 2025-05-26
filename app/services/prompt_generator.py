@@ -13,7 +13,8 @@ from .prompting_techniques import (
     apply_few_shot,
     apply_self_consistency,
     apply_role_prompting,
-    apply_reflexion_prompting
+    apply_reflexion_prompting,
+    apply_control
 )
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,11 @@ class PromptGenerator:
         self.generator_model = generator_model
         # Define the available prompting techniques
         self.prompting_techniques = {
+            "control": {
+                "name": "Control",
+                "description": "Returns the original prompt unchanged - serves as a baseline for comparison",
+                "complexity": "none"
+            },
             "cot_simple": {
                 "name": "Chain of Thought (Simple)",
                 "description": "Adds 'Let's think step by step' to encourage methodical reasoning",
@@ -110,7 +116,14 @@ class PromptGenerator:
             return prompt
         
         # Apply the appropriate technique
-        if technique == "cot_simple":
+        if technique == "control":
+            return await apply_control(
+                self.ollama_service,
+                self.generator_model,
+                prompt,
+                template_params
+            )
+        elif technique == "cot_simple":
             return await apply_cot_simple(
                 self.ollama_service,
                 self.generator_model,
