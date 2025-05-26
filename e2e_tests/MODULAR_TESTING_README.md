@@ -1,14 +1,15 @@
 # Modular Testing Scripts
 
-This directory contains a modular approach to testing the PromptVs API, breaking down the resource-intensive E2E test into three smaller, focused scripts that can be run individually or in sequence.
+This directory contains a modular approach to testing the PromptVs API, breaking down the resource-intensive E2E test into four focused scripts that can be run individually or in sequence.
 
 ## Overview
 
-The modular testing system consists of three scripts that work together:
+The modular testing system consists of four scripts that work together:
 
 1. **01_create_prompts_and_versions.py** - Creates prompts and prompt versions
 2. **02_create_test_runs.py** - Runs tests for each version
 3. **03_ab_testing_evaluations.py** - Performs A/B testing evaluations and generates reports
+4. **04_elo_rating_analysis.py** - Comprehensive ELO rating analysis and insights
 
 Each script saves its results to JSON files that the next script can load, allowing for resource-efficient testing and the ability to restart from any point in the workflow.
 
@@ -87,12 +88,108 @@ python 03_ab_testing_evaluations.py [options]
 - `--input` - Input file from script 2 (default: test_runs.json)
 - `--verbose` - Enable verbose logging
 
+### Script 4: ELO Rating Analysis and Insights
+**File:** `04_elo_rating_analysis.py`
+
+**Purpose:**
+- Fetches ELO ratings from completed A/B testing evaluations
+- Performs comprehensive statistical analysis on ELO scores
+- Generates actionable insights and recommendations
+- Creates detailed reports and visualizations
+- Analyzes performance across techniques, models, and prompts
+
+**Resource Usage:** Low (analysis only, no model inference)
+
+**Input:** 
+- Evaluation report from script 3 (evaluation_report.json)
+- Optional configuration file for analysis parameters
+
+**Output:** 
+- `elo_analysis_report_YYYYMMDD_HHMMSS.json` - Comprehensive analysis results
+- `elo_insights_YYYYMMDD_HHMMSS.md` - Executive summary and insights
+- `elo_recommendations_YYYYMMDD_HHMMSS.json` - Actionable recommendations
+
+**Usage:**
+```bash
+# Analyze using evaluation report from script 3
+python 04_elo_rating_analysis.py --input evaluation_report_20250526_150026.json
+
+# Analyze specific test runs
+python 04_elo_rating_analysis.py --test-runs 123,124,125
+
+# Use configuration file for advanced analysis
+python 04_elo_rating_analysis.py --config sample_elo_analysis_config.json
+
+# Dry run to see what would be analyzed
+python 04_elo_rating_analysis.py --input evaluation_report_20250526_150026.json --dry-run
+```
+
+**Options:**
+- `--api-url` - API base URL (default: http://localhost:8000)
+- `--input` - Input file from script 3 (evaluation_report.json)
+- `--test-runs` - Comma-separated list of test run IDs
+- `--config` - Configuration file for analysis parameters
+- `--output-dir` - Directory for output files (default: current directory)
+- `--dry-run` - Show what would be analyzed without running
+- `--verbose` - Enable verbose logging
+
+**Analysis Features:**
+- **ELO Score Distribution Analysis:** Statistical distribution of all three ELO types (elo_score, version_elo, global_elo)
+- **Technique Performance Analysis:** Comparative analysis across different prompt techniques
+- **Model Performance Analysis:** Cross-model performance comparison and suitability assessment
+- **Statistical Significance Testing:** Confidence intervals and effect size calculations
+- **Outlier Detection:** Identification of unusual performance patterns
+- **Performance Insights:** Actionable insights about what works best
+- **Risk Assessment:** Identification of potential performance risks
+- **Optimization Opportunities:** Recommendations for improvement
+
+**Sample Configuration File:** `sample_elo_analysis_config.json`
+```json
+{
+  "analysis_config": {
+    "confidence_level": 0.95,
+    "effect_size_threshold": 0.5,
+    "outlier_threshold": 2.0
+  },
+  "output_config": {
+    "generate_markdown": true,
+    "generate_recommendations": true,
+    "include_raw_data": false
+  },
+  "api_config": {
+    "base_url": "http://localhost:8000",
+    "timeout": 30
+  }
+}
+```
+
+**Report Contents:**
+
+*Comprehensive JSON Report:*
+- Raw ELO data and metadata
+- Statistical analysis results
+- Performance rankings and comparisons
+- Confidence intervals and significance tests
+- Detailed insights by category
+
+*Executive Markdown Summary:*
+- Key findings and recommendations
+- Performance highlights
+- Risk factors and opportunities
+- Visual data summaries
+
+*Recommendations Report:*
+- Prioritized action items
+- Technique optimization suggestions
+- Model selection guidance
+- Performance improvement strategies
+
 ## Convenience Scripts
 
 ### Run All Scripts in Sequence
 **File:** `run_all_scripts.py`
 
-Runs all three scripts in sequence with proper error handling and timing.
+Runs all four scripts in sequence with proper error handling and timing.
 
 **Usage:**
 ```bash
@@ -103,6 +200,7 @@ python run_all_scripts.py [options]
 - `--api-url` - API base URL (default: http://localhost:8000)
 - `--config` - Test configuration file (default: test_prompts_config.json)
 - `--runs-per-version` - Number of test runs per version (default: 2)
+- `--include-analysis` - Include ELO analysis (Script 4) in the workflow
 - `--verbose` - Enable verbose logging
 
 ### Windows Batch File
@@ -148,6 +246,28 @@ Contains:
 - Detailed comparison results
 - Win rates and statistics
 
+### elo_analysis_report_YYYYMMDD_HHMMSS.json
+Contains:
+- Comprehensive ELO rating analysis
+- Statistical analysis results
+- Performance insights and recommendations
+- Technique and model comparisons
+- Risk assessment and optimization opportunities
+
+### elo_insights_YYYYMMDD_HHMMSS.md
+Contains:
+- Executive summary of findings
+- Key performance insights
+- Actionable recommendations
+- Risk factors and opportunities
+
+### elo_recommendations_YYYYMMDD_HHMMSS.json
+Contains:
+- Prioritized recommendations
+- Technique optimization suggestions
+- Model selection guidance
+- Performance improvement strategies
+
 ## Example Workflow
 
 ### Run All Scripts at Once
@@ -155,8 +275,11 @@ Contains:
 # Run complete workflow with default settings
 python run_all_scripts.py
 
+# Run complete workflow including ELO analysis
+python run_all_scripts.py --include-analysis
+
 # Run with custom settings
-python run_all_scripts.py --runs-per-version 3 --verbose
+python run_all_scripts.py --runs-per-version 3 --include-analysis --verbose
 ```
 
 ### Run Scripts Individually
@@ -169,6 +292,9 @@ python 02_create_test_runs.py --runs-per-version 3 --verbose
 
 # Step 3: Perform evaluations
 python 03_ab_testing_evaluations.py --verbose
+
+# Step 4: Analyze ELO ratings and generate insights
+python 04_elo_rating_analysis.py --input evaluation_report_20250526_150026.json --verbose
 ```
 
 ### Restart from a Specific Point
@@ -178,6 +304,12 @@ python 02_create_test_runs.py --input prompts_and_versions.json
 
 # If scripts 1 and 2 completed but script 3 failed, restart from script 3
 python 03_ab_testing_evaluations.py --input test_runs.json
+
+# If scripts 1-3 completed, run just the analysis
+python 04_elo_rating_analysis.py --input evaluation_report_20250526_150026.json
+
+# Analyze specific test runs without running previous scripts
+python 04_elo_rating_analysis.py --test-runs 123,124,125
 ```
 
 ## Advantages Over Monolithic E2E Test
@@ -203,6 +335,7 @@ Each script creates its own log file:
 - `01_create_prompts_YYYYMMDD_HHMMSS.log`
 - `02_test_runs_YYYYMMDD_HHMMSS.log`
 - `03_evaluations_YYYYMMDD_HHMMSS.log`
+- `04_elo_analysis_YYYYMMDD_HHMMSS.log`
 
 ## Error Handling
 
@@ -220,5 +353,6 @@ Based on typical configurations:
 - **Script 1:** 2-5 minutes (depends on technique complexity)
 - **Script 2:** 10-30 minutes (depends on number of runs and model speed)
 - **Script 3:** 5-20 minutes (depends on number of comparisons and evaluation model)
+- **Script 4:** 1-5 minutes (depends on amount of data and analysis complexity)
 
-Total time is typically 20-60 minutes for a complete workflow, compared to the monolithic approach which could take 1-2 hours or more.
+Total time is typically 20-65 minutes for a complete workflow including analysis, compared to the monolithic approach which could take 1-2 hours or more.

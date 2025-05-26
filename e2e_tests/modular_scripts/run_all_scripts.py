@@ -3,10 +3,11 @@
 Run All Scripts
 ===============
 
-Convenience script to run all three testing scripts in sequence:
+Convenience script to run all testing scripts in sequence:
 1. Create prompts and versions
 2. Create test runs  
 3. Perform A/B testing evaluations
+4. Analyze ELO ratings and generate insights (optional)
 
 Usage:
     python run_all_scripts.py [options]
@@ -45,6 +46,7 @@ def main():
     parser.add_argument('--api-url', default='http://localhost:8000', help='API base URL')
     parser.add_argument('--config', default='../config/test_prompts_config.json', help='Test configuration file')
     parser.add_argument('--runs-per-version', type=int, default=2, help='Number of test runs per version')
+    parser.add_argument('--include-analysis', action='store_true', help='Include ELO analysis (Script 4) in the workflow')
     parser.add_argument('--verbose', '-v', action='store_true', help='Enable verbose logging')
     
     args = parser.parse_args()
@@ -58,6 +60,7 @@ def main():
     print(f"API URL: {args.api_url}")
     print(f"Config file: {args.config}")
     print(f"Runs per version: {args.runs_per_version}")
+    print(f"Include ELO analysis: {args.include_analysis}")
     
     overall_start = time.time()
     
@@ -77,7 +80,21 @@ def main():
     script3_args = common_args.copy()
     if not run_script('03_ab_testing_evaluations.py', script3_args):
         print("\n❌ Workflow failed at script 3")
-        sys.exit(1)
+        sys.exit(1)    # Script 4: ELO rating analysis (optional)
+    if args.include_analysis:
+        # Use the latest evaluation report from script 3
+        import glob
+        evaluation_reports = glob.glob('../output/evaluation_report_*.json')
+        if evaluation_reports:
+            latest_report = max(evaluation_reports)
+            script4_args = common_args + ['--input', latest_report]
+        else:
+            print("\n❌ No evaluation report found for ELO analysis")
+            sys.exit(1)
+        
+        if not run_script('04_elo_rating_analysis.py', script4_args):
+            print("\n❌ Workflow failed at script 4")
+            sys.exit(1)
     
     overall_end = time.time()
     total_time = overall_end - overall_start
@@ -90,8 +107,16 @@ def main():
     print("- prompts_and_versions.json")
     print("- test_runs.json")
     print("- evaluation_report_*.json")
+    if args.include_analysis:
+        print("- elo_analysis_report_*.json")
+        print("- elo_insights_*.md")
+        print("- elo_recommendations_*.json")
     print("\nLog files are in ../logs/ directory")
-    print("Check the evaluation report for detailed results!")
+    if args.include_analysis:
+        print("Check the evaluation report and ELO analysis for detailed results!")
+    else:
+        print("Check the evaluation report for detailed results!")
+        print("Run with --include-analysis to generate ELO insights!")
 
 if __name__ == "__main__":
     main()
