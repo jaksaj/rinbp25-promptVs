@@ -381,3 +381,17 @@ class TechniqueExampleResponse(BaseModel):
     description: str
     original_prompt: str
     transformed_prompt: str
+
+class BulkEloRatingsRequest(BaseModel):
+    test_run_ids: List[str]
+
+class BulkEloRatingsResponse(BaseModel):
+    results: List[EloRatingResult]
+    total: int
+
+class BulkPromptVersionMetadataRequest(BaseModel):
+    version_ids: List[str]
+
+class BulkPromptVersionMetadataResponse(BaseModel):
+    results: List[Dict[str, Any]]
+    total: int

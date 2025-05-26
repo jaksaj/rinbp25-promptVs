@@ -983,3 +983,29 @@ class Neo4jService:
         except Exception as e:
             logger.error(f"Error getting prompt version id for test run: {str(e)}")
             return None
+        
+    def get_bulk_elo_ratings(self, test_run_ids: list[str]) -> list[dict]:
+        """
+        Get ELO ratings for a list of test run IDs in bulk.
+        Args:
+            test_run_ids: List of test run IDs
+        Returns:
+            List of ELO rating data dicts (may be empty if not found)
+        """
+        try:
+            with self.driver.session(database=NEO4J_DATABASE) as session:
+                query = """
+                MATCH (e:EloRating)-[:RATES]->(tr:TestRun)
+                WHERE tr.id IN $test_run_ids
+                RETURN e, tr.id as test_run_id
+                """
+                result = session.run(query, test_run_ids=test_run_ids)
+                ratings = []
+                for record in result:
+                    elo_data = dict(record["e"])
+                    elo_data["test_run_id"] = record["test_run_id"]
+                    ratings.append(elo_data)
+                return ratings
+        except Exception as e:
+            logger.error(f"Error getting bulk ELO ratings: {str(e)}")
+            raise

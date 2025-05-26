@@ -11,7 +11,9 @@ from app.api.models.prompt import (
     TestRunResponse,
     TestRunMetrics,
     PromptComparisonRequest,
-    TestRunComparisonResponse
+    TestRunComparisonResponse,
+    BulkPromptVersionMetadataRequest,
+    BulkPromptVersionMetadataResponse
 )
 from app.core.dependencies import get_neo4j_service, get_ollama_service
 from app.services.neo4j import Neo4jService
@@ -156,6 +158,23 @@ async def get_prompt_version(
         raise
     except Exception as e:
         logger.error(f"Error getting prompt version: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/prompt-versions/bulk", response_model=BulkPromptVersionMetadataResponse)
+async def get_bulk_prompt_version_metadata(
+    request: BulkPromptVersionMetadataRequest,
+    neo4j_service: Neo4jService = Depends(get_neo4j_service)
+):
+    """Get metadata for multiple prompt versions in bulk."""
+    try:
+        results = []
+        for version_id in request.version_ids:
+            version = neo4j_service.get_prompt_version(version_id)
+            if version:
+                results.append(version)
+        return BulkPromptVersionMetadataResponse(results=results, total=len(results))
+    except Exception as e:
+        logger.error(f"Error in get_bulk_prompt_version_metadata: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # TestRun endpoints

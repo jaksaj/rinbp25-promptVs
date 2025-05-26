@@ -472,3 +472,20 @@ async def export_test_results(
     except Exception as e:
         logger.error(f"Error exporting batch test results: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/test-runs/bulk")
+async def get_bulk_test_run_metadata(
+    request: Dict[str, List[str]],  # expects {"test_run_ids": [...]}
+    neo4j_service: Neo4jService = Depends(get_neo4j_service)
+):
+    """Get metadata for multiple test runs in bulk."""
+    try:
+        results = []
+        for test_run_id in request.get("test_run_ids", []):
+            test_run = neo4j_service.get_test_run(test_run_id)
+            if test_run:
+                results.append(test_run)
+        return {"results": results, "total": len(results)}
+    except Exception as e:
+        logger.error(f"Error in get_bulk_test_run_metadata: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
