@@ -172,6 +172,42 @@ class Neo4jService:
             logger.error(f"Error creating prompt: {str(e)}")
             raise
 
+    def create_prompts_batch(self, prompts: List[Any]) -> List[str]:
+        """Create multiple prompts in a batch and return their IDs."""
+        ids = []
+        try:
+            with self.driver.session(database=NEO4J_DATABASE) as session:
+                for data in prompts:
+                    result = session.run(
+                        """
+                        MATCH (pg:PromptGroup {id: $prompt_group_id})
+                        CREATE (p:Prompt {
+                            id: randomUUID(),
+                            name: $name,
+                            description: $description,
+                            content: $content,
+                            expected_solution: $expected_solution,
+                            tags: $tags,
+                            created_at: datetime()
+                        })
+                        CREATE (p)-[:BELONGS_TO]->(pg)
+                        RETURN p.id as id
+                        """,
+                        prompt_group_id=data.prompt_group_id,
+                        name=data.name,
+                        description=data.description,
+                        content=data.content,
+                        expected_solution=data.expected_solution,
+                        tags=data.tags or []
+                    )
+                    record = result.single()
+                    if record:
+                        ids.append(record["id"])
+            return ids
+        except Exception as e:
+            logger.error(f"Error creating prompts batch: {str(e)}")
+            raise
+
     def get_prompts_by_group(self, group_id: str) -> List[Dict]:
         """Get all prompts in a specific prompt group."""
         try:

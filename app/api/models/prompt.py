@@ -395,3 +395,27 @@ class BulkPromptVersionMetadataRequest(BaseModel):
 class BulkPromptVersionMetadataResponse(BaseModel):
     results: List[Dict[str, Any]]
     total: int
+
+class BatchPromptCreate(BaseModel):
+    prompts: List[PromptCreate]
+
+class BatchPromptCreateResponse(BaseModel):
+    ids: List[str]
+
+class BatchApplyTechniquesRequest(BaseModel):
+    prompt_ids: List[str]
+    techniques: List[str]
+    generator_model: Optional[str] = None
+
+class BatchApplyTechniquesResponse(BaseModel):
+    job_id: str
+    status: str
+    submitted_at: datetime
+
+class BatchApplyTechniquesStatusResponse(BaseModel):
+    job_id: str
+    status: str
+    submitted_at: datetime
+    completed_at: Optional[datetime] = None
+    results: Optional[Dict[str, Dict[str, Optional[str]]]] = None  # {prompt_id: {technique: version_id}}
+    error: Optional[str] = None

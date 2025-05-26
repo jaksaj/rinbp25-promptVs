@@ -228,9 +228,9 @@ class PromptCreator:
         return self.prompt_group_id
     
     def create_prompts(self) -> List[str]:
-        """Create prompts in the prompt group"""
-        logger.info("Creating prompts...")
-        
+        """Create prompts in the prompt group using batch endpoint"""
+        logger.info("Creating prompts (batch)...")
+        prompt_payloads = []
         for prompt_config in self.config['prompts']:
             prompt_data = {
                 'prompt_group_id': self.prompt_group_id,
@@ -240,45 +240,56 @@ class PromptCreator:
                 'expected_solution': prompt_config.get('expected_solution'),
                 'tags': prompt_config.get('tags', [])
             }
-            
-            response = self._make_request('POST', '/api/prompts', prompt_data)
-            prompt_id = response.json()['id']
-            self.prompt_ids.append(prompt_id)
+            prompt_payloads.append(prompt_data)
+
+        batch_data = {'prompts': prompt_payloads}
+        response = self._make_request('POST', '/api/prompts/batch', batch_data)
+        ids = response.json()['ids']
+        self.prompt_ids = ids
+        for prompt_config, prompt_id in zip(self.config['prompts'], ids):
             logger.info(f"Created prompt '{prompt_config['name']}' with ID: {prompt_id}")
-        
         return self.prompt_ids
     
     def create_prompt_versions(self, techniques: List[str] = ['cot_simple', 'cot_reasoning']) -> Dict[str, List[str]]:
-        """Create prompt versions using different techniques"""
-        logger.info(f"Creating prompt versions using techniques: {techniques}")
-        
+        """Create prompt versions using different techniques via batch endpoint and poll for results."""
+        logger.info(f"Creating prompt versions using techniques: {techniques} (batch mode)")
+        batch_data = {
+            'prompt_ids': self.prompt_ids,
+            'techniques': techniques,
+            'generator_model': self.generator_model
+        }
+        response = self._make_request('POST', '/api/techniques/batch-apply', batch_data)
+        job_id = response.json()['job_id']
+        logger.info(f"Batch job submitted: {job_id}")
+        # Poll for completion
+        status = None
+        results = None
+        for attempt in range(600):  # up to 10 minutes
+            time.sleep(1)
+            status_resp = self._make_request('GET', f'/api/techniques/batch-status/{job_id}')
+            status_json = status_resp.json()
+            status = status_json['status']
+            if status == 'completed':
+                results = status_json['results']
+                logger.info(f"Batch job completed after {attempt+1} seconds")
+                break
+            elif status == 'failed':
+                logger.error(f"Batch job failed: {status_json.get('error')}")
+                raise Exception(f"Batch job failed: {status_json.get('error')}")
+            elif attempt % 10 == 0:
+                logger.info(f"Waiting for batch job... ({attempt+1}s)")
+        if status != 'completed':
+            raise Exception("Batch job did not complete in time")
+        # Collect version IDs
         for prompt_id in self.prompt_ids:
             self.prompt_versions[prompt_id] = []
-            
             for technique in techniques:
-                logger.info(f"Applying technique '{technique}' to prompt {prompt_id}")
-                
-                technique_data = {
-                    'prompt_id': prompt_id,
-                    'technique': technique,
-                    'save_as_version': True,
-                    'generator_model': self.generator_model
-                }
-                
-                try:
-                    response = self._make_request('POST', '/api/techniques/apply', technique_data)
-                    result = response.json()
-                    version_id = result['version_id']
-                    
-                    if version_id:
-                        self.prompt_versions[prompt_id].append(version_id)
-                        logger.info(f"Created version {version_id} using technique '{technique}'")
-                    else:
-                        logger.error(f"Failed to create version for technique '{technique}'")
-                        
-                except Exception as e:
-                    logger.error(f"Failed to apply technique '{technique}' to prompt {prompt_id}: {e}")
-        
+                version_id = results.get(prompt_id, {}).get(technique)
+                if version_id:
+                    self.prompt_versions[prompt_id].append(version_id)
+                    logger.info(f"Created version {version_id} for prompt {prompt_id} using technique '{technique}'")
+                else:
+                    logger.error(f"Failed to create version for prompt {prompt_id} using technique '{technique}'")
         return self.prompt_versions
     
     def save_results(self, filename: str = "../output/prompts_and_versions.json") -> str:

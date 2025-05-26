@@ -13,7 +13,12 @@ from app.api.models.prompt import (
     PromptComparisonRequest,
     TestRunComparisonResponse,
     BulkPromptVersionMetadataRequest,
-    BulkPromptVersionMetadataResponse
+    BulkPromptVersionMetadataResponse,
+    BatchPromptCreate,
+    BatchPromptCreateResponse,
+    BatchApplyTechniquesRequest,
+    BatchApplyTechniquesResponse,
+    BatchApplyTechniquesStatusResponse
 )
 from app.core.dependencies import get_neo4j_service, get_ollama_service
 from app.services.neo4j import Neo4jService
@@ -21,9 +26,14 @@ from app.services.ollama import OllamaService
 import logging
 import time
 from datetime import datetime
+from uuid import uuid4
+import asyncio
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# In-memory job store for demo (replace with persistent store for production)
+batch_jobs = {}
 
 # PromptGroup endpoints
 @router.post("/prompt-groups", response_model=Dict[str, str])
@@ -84,6 +94,19 @@ async def create_prompt(
         return {"id": prompt_id}
     except Exception as e:
         logger.error(f"Error creating prompt: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/prompts/batch", response_model=BatchPromptCreateResponse)
+async def create_prompts_batch(
+    request: BatchPromptCreate,
+    neo4j_service: Neo4jService = Depends(get_neo4j_service)
+):
+    """Create multiple prompts in a batch."""
+    try:
+        ids = neo4j_service.create_prompts_batch(request.prompts)
+        return BatchPromptCreateResponse(ids=ids)
+    except Exception as e:
+        logger.error(f"Error creating prompts batch: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/prompt-groups/{group_id}/prompts", response_model=List[Dict[str, Any]])
@@ -334,3 +357,78 @@ async def test_prompt_and_save(
     except Exception as e:
         logger.error(f"Error processing and saving prompt: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# Batch apply techniques endpoints
+@router.post("/techniques/batch-apply", response_model=BatchApplyTechniquesResponse)
+async def batch_apply_techniques(
+    request: BatchApplyTechniquesRequest,
+    background_tasks: BackgroundTasks,
+    neo4j_service: Neo4jService = Depends(get_neo4j_service),
+    ollama_service: OllamaService = Depends(get_ollama_service)
+):
+    """Apply techniques to multiple prompts in the background."""
+    job_id = str(uuid4())
+    submitted_at = datetime.utcnow()
+    batch_jobs[job_id] = {
+        "status": "pending",
+        "submitted_at": submitted_at,
+        "results": None,
+        "error": None,
+        "completed_at": None
+    }
+    background_tasks.add_task(_run_batch_apply_techniques, job_id, request, neo4j_service, ollama_service)
+    return BatchApplyTechniquesResponse(job_id=job_id, status="pending", submitted_at=submitted_at)
+
+def _run_batch_apply_techniques(job_id, request, neo4j_service, ollama_service):
+    try:
+        from app.services.prompt_generator import PromptGenerator
+        from app.api.models.prompt import PromptVersionCreate
+        results = {}
+        generator_model = request.generator_model or "llama3.1:8b"
+        prompt_generator = PromptGenerator(ollama_service, generator_model)
+        for prompt_id in request.prompt_ids:
+            results[prompt_id] = {}
+            prompt = neo4j_service.get_prompt(prompt_id)
+            if not prompt:
+                for technique in request.techniques:
+                    results[prompt_id][technique] = None
+                continue
+            for technique in request.techniques:
+                try:
+                    # Properly call async apply_technique
+                    transformed_prompt = asyncio.run(prompt_generator.apply_technique(
+                        prompt=prompt["content"],
+                        technique=technique
+                    ))
+                    version = PromptVersionCreate(
+                        prompt_id=prompt_id,
+                        content=transformed_prompt,
+                        version=f"{technique}_technique",
+                        notes=f"Auto-generated using {technique}"
+                    )
+                    version_id = neo4j_service.create_prompt_version(version)
+                    results[prompt_id][technique] = version_id
+                except Exception as e:
+                    results[prompt_id][technique] = None
+                    logger.error(f"Batch version creation failed for prompt {prompt_id}, technique {technique}: {e}")
+        batch_jobs[job_id]["status"] = "completed"
+        batch_jobs[job_id]["results"] = results
+        batch_jobs[job_id]["completed_at"] = datetime.utcnow()
+    except Exception as e:
+        batch_jobs[job_id]["status"] = "failed"
+        batch_jobs[job_id]["error"] = str(e)
+        batch_jobs[job_id]["completed_at"] = datetime.utcnow()
+
+@router.get("/techniques/batch-status/{job_id}", response_model=BatchApplyTechniquesStatusResponse)
+async def get_batch_apply_techniques_status(job_id: str):
+    job = batch_jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return BatchApplyTechniquesStatusResponse(
+        job_id=job_id,
+        status=job["status"],
+        submitted_at=job["submitted_at"],
+        completed_at=job["completed_at"],
+        results=job["results"],
+        error=job["error"]
+    )
