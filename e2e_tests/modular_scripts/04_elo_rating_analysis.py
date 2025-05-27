@@ -276,64 +276,58 @@ def print_report_info(report_files: Dict[str, str]):
 
 
 def load_test_runs_from_input_file(input_path: str) -> List[str]:
-    """Load test run IDs from evaluation_report.json file from script 3"""
+    """Load test run IDs from evaluation_report.json file from script 3 (custom structure support)"""
     try:
         with open(input_path, 'r', encoding='utf-8') as f:
             evaluation_data = json.load(f)
-        
-        # Extract test run IDs from the evaluation report structure
-        test_runs = []
-        
-        # Check if it's an evaluation report with detailed_results
-        if isinstance(evaluation_data, dict) and 'detailed_results' in evaluation_data:
-            detailed_results = evaluation_data['detailed_results']
-            
-            # Extract from test_runs_by_version (most reliable source)
-            if 'test_runs_by_version' in detailed_results:
-                test_runs_by_version = detailed_results['test_runs_by_version']
-                for version_id, run_ids in test_runs_by_version.items():
-                    if isinstance(run_ids, list):
-                        test_runs.extend(run_ids)
-                    elif isinstance(run_ids, str):
-                        test_runs.append(run_ids)
-            
-            # Also extract from version_comparisons and model_comparisons as backup
-            if not test_runs:
-                for comparison_type in ['version_comparisons', 'model_comparisons']:
-                    comparisons = detailed_results.get(comparison_type, [])
-                    for comparison in comparisons:
-                        if isinstance(comparison, dict):
-                            # Extract test run IDs from comparison
-                            for key in ['test_run_id1', 'test_run_id2', 'winner_test_run_id']:
-                                if key in comparison and comparison[key]:
-                                    test_runs.append(comparison[key])
-        
-        # Fallback: check if it's a test_runs file structure (backward compatibility)
-        elif isinstance(evaluation_data, list):
-            for run in evaluation_data:
-                if isinstance(run, dict) and 'test_run_id' in run:
-                    test_runs.append(run['test_run_id'])
-                elif isinstance(run, str):
-                    test_runs.append(run)
-        elif isinstance(evaluation_data, dict) and 'test_runs' in evaluation_data:
-            runs_list = evaluation_data['test_runs']
-            if isinstance(runs_list, list):
-                for run in runs_list:
-                    if isinstance(run, dict) and 'test_run_id' in run:
-                        test_runs.append(run['test_run_id'])
-                    elif isinstance(run, str):
-                        test_runs.append(run)
-        
-        # Remove duplicates and filter out empty values
-        test_runs = list(set([run for run in test_runs if run and isinstance(run, str)]))
-        
+
+        test_runs = set()
+        # Try to extract from the custom structure
+        # Look for runs under best_versions_per_prompt or versions_by_prompt
+        if 'best_versions_per_prompt' in evaluation_data:
+            bvp = evaluation_data['best_versions_per_prompt']
+            # Try to find all version IDs
+            all_version_ids = set()
+            for prompt_data in bvp.values():
+                if 'all_version_wins' in prompt_data:
+                    all_version_ids.update(prompt_data['all_version_wins'].keys())
+                if 'best_version_id' in prompt_data:
+                    all_version_ids.add(prompt_data['best_version_id'])
+            # Now look for runs for each version
+            for version_id in all_version_ids:
+                runs = evaluation_data.get('runs_by_version', {}).get(version_id, [])
+                for run in runs:
+                    if isinstance(run, dict) and 'run_id' in run:
+                        test_runs.add(run['run_id'])
+        # Also check for versions_by_prompt (for completeness)
+        if 'versions_by_prompt' in evaluation_data:
+            for version_list in evaluation_data['versions_by_prompt'].values():
+                for version_id in version_list:
+                    runs = evaluation_data.get('runs_by_version', {}).get(version_id, [])
+                    for run in runs:
+                        if isinstance(run, dict) and 'run_id' in run:
+                            test_runs.add(run['run_id'])
+        # Fallback: try to find any run_id in the whole file
+        if not test_runs:
+            def find_run_ids(obj):
+                found = set()
+                if isinstance(obj, dict):
+                    for k, v in obj.items():
+                        if k == 'run_id' and isinstance(v, str):
+                            found.add(v)
+                        else:
+                            found.update(find_run_ids(v))
+                elif isinstance(obj, list):
+                    for item in obj:
+                        found.update(find_run_ids(item))
+                return found
+            test_runs = find_run_ids(evaluation_data)
+        test_runs = list(test_runs)
         if not test_runs:
             logger.error(f"No test run IDs found in input file: {input_path}")
             return []
-        
         logger.info(f"Extracted {len(test_runs)} unique test run IDs from {input_path}")
         return test_runs
-        
     except FileNotFoundError:
         logger.error(f"Input file not found: {input_path}")
         return []
@@ -433,19 +427,264 @@ def run_analysis(args: argparse.Namespace) -> bool:
 def main():
     """Main entry point"""
     args = parse_arguments()
-    
-    print("ELO Rating Analysis and Insights")
+
+    print("ELO Rating Analysis and Insights (Custom Analysis)")
     print("=" * 40)
-    
-    success = run_analysis(args)
-    
-    if success:
-        print("\n🎉 ELO rating analysis completed successfully!")
-        sys.exit(0)
-    else:
-        print("\n💥 ELO rating analysis failed!")
+
+    # Step 1: Load test run IDs from evaluation_report.json
+    if not args.input:
+        print("Error: --input evaluation_report.json is required.")
+        sys.exit(1)
+    test_run_ids = load_test_runs_from_input_file(args.input)
+    if not test_run_ids:
+        print("No test run IDs found in input file.")
         sys.exit(1)
 
+    # Step 2: Collect all needed data using bulk endpoints
+    from elo_analyzer.elo_data_collector import EloDataCollector
+    # Ensure API URL uses /api as base path
+    api_url = args.api_url.rstrip("/")
+    if not api_url.endswith("/api"):
+        api_url = api_url + "/api"
+    collector = EloDataCollector(api_url)
+
+    print(f"Fetching ELO ratings, test run metadata, and prompt version metadata for {len(test_run_ids)} test runs...")
+    elo_ratings = collector.collect_all_elo_ratings(test_run_ids)
+    test_run_metadata = collector.collect_test_run_metadata(test_run_ids)
+    version_ids = list({tr.get('prompt_version_id') for tr in test_run_metadata.values() if tr.get('prompt_version_id')})
+    prompt_version_metadata = collector.collect_prompt_version_metadata(version_ids)
+
+    # Log a sample of each entity for debugging
+    import json  # Ensure json is imported before logging samples
+    if elo_ratings:
+        sample_elo = next(iter(elo_ratings.values()))
+        logger.info(f"Sample ELO rating: {json.dumps(sample_elo, indent=2)}")
+    else:
+        logger.warning("No ELO ratings fetched.")
+    if test_run_metadata:
+        sample_tr = next(iter(test_run_metadata.values()))
+        logger.info(f"Sample test run metadata: {json.dumps(sample_tr, indent=2)}")
+    else:
+        logger.warning("No test run metadata fetched.")
+    if prompt_version_metadata:
+        sample_pv = next(iter(prompt_version_metadata.values()))
+        logger.info(f"Sample prompt version metadata: {json.dumps(sample_pv, indent=2)}")
+    else:
+        logger.warning("No prompt version metadata fetched.")
+    logger.info(f"All version_ids: {version_ids}")
+
+    # --- NEW: Load runs_by_version from evaluation report for model mapping ---
+    def find_runs_by_version(obj):
+        if isinstance(obj, dict):
+            if 'runs_by_version' in obj:
+                return obj['runs_by_version']
+            for v in obj.values():
+                found = find_runs_by_version(v)
+                if found:
+                    return found
+        elif isinstance(obj, list):
+            for item in obj:
+                found = find_runs_by_version(item)
+                if found:
+                    return found
+        return None
+
+    runs_by_version = {}
+    try:
+        with open(args.input, 'r', encoding='utf-8') as f:
+            evaluation_data = json.load(f)
+        logger.info(f"Top-level keys in evaluation report: {list(evaluation_data.keys())}")
+        if 'runs_by_version' in evaluation_data:
+            runs_by_version = evaluation_data['runs_by_version']
+            logger.info("Found runs_by_version at top level.")
+        elif 'detailed_results' in evaluation_data and 'runs_by_version' in evaluation_data['detailed_results']:
+            runs_by_version = evaluation_data['detailed_results']['runs_by_version']
+            logger.info("Found runs_by_version in detailed_results.")
+        else:
+            runs_by_version = find_runs_by_version(evaluation_data) or {}
+            if runs_by_version:
+                logger.info("Found runs_by_version recursively.")
+        # Log a sample of runs_by_version
+        if runs_by_version:
+            sample_ver, sample_runs = next(iter(runs_by_version.items()))
+            logger.info(f"Sample runs_by_version: version_id={sample_ver}, runs={json.dumps(sample_runs, indent=2)}")
+        else:
+            logger.warning("No runs_by_version found in evaluation report.")
+            # Print first 200 chars of file for debugging
+            with open(args.input, 'r', encoding='utf-8') as f2:
+                logger.warning(f"First 200 chars of file: {f2.read(200)}")
+    except Exception as e:
+        logger.warning(f"Could not load runs_by_version from evaluation report: {e}")
+
+    # Build reverse mappings for model and technique
+    model_to_runs = {}
+    technique_to_versions = {}
+    prompt_to_versions = {}
+    version_to_prompt = {}
+    version_to_model = {}
+    version_to_technique = {}
+    for tr in test_run_metadata.values():
+        version = tr.get('prompt_version_id')
+        # Fallback: get prompt from test run metadata or from prompt_version_metadata
+        prompt = tr.get('prompt_id')
+        if not prompt and version and version in prompt_version_metadata:
+            prompt = prompt_version_metadata[version].get('prompt_id')
+        # Try to get model from test run metadata, else from runs_by_version
+        model = tr.get('model_used') or tr.get('model') or tr.get('model_id')
+        if not model and version and version in runs_by_version:
+            runs = runs_by_version[version]
+            if runs and isinstance(runs, list) and 'model_name' in runs[0]:
+                model = runs[0]['model_name']
+        # Fallback: get technique from prompt_version_metadata, or use version/notes as fallback
+        technique = None
+        if version and version in prompt_version_metadata:
+            technique = prompt_version_metadata[version].get('technique')
+            if not technique:
+                # Try to infer from 'version' or 'notes' fields
+                technique = prompt_version_metadata[version].get('version') or prompt_version_metadata[version].get('notes')
+        if model and version:
+            model_to_runs.setdefault(model, []).append(version)
+            version_to_model[version] = model
+        if technique and version:
+            technique_to_versions.setdefault(technique, []).append(version)
+            version_to_technique[version] = technique
+        if prompt and version:
+            prompt_to_versions.setdefault(prompt, []).append(version)
+            version_to_prompt[version] = prompt
+
+    # Build ELO per version (both version_elo and global_elo)
+    version_elo = {}
+    version_global_elo = {}
+    for tr in test_run_metadata.values():
+        version = tr.get('prompt_version_id')
+        tr_id = tr.get('id')
+        if version and tr_id and tr_id in elo_ratings:
+            version_elo.setdefault(version, []).append(elo_ratings[tr_id].get('version_elo_score', 1000))
+            version_global_elo.setdefault(version, []).append(elo_ratings[tr_id].get('global_elo_score', 1000))
+    avg_version_elo_per_version = {v: sum(scores)/len(scores) for v, scores in version_elo.items() if scores}
+    avg_global_elo_per_version = {v: sum(scores)/len(scores) for v, scores in version_global_elo.items() if scores}
+
+    # 1. Model comparison (use version elo)
+    model_comparison = {}
+    for model, versions in model_to_runs.items():
+        elos = [avg_version_elo_per_version.get(v, 1000) for v in versions]
+        model_comparison[model] = {
+            'avg_elo': sum(elos)/len(elos) if elos else 1000,
+            'num_prompt_versions': len(versions)
+        }
+    # Number of prompt versions where the model's test run had highest version elo
+    prompt_best_model = {}
+    for prompt, versions in prompt_to_versions.items():
+        best_v = max(versions, key=lambda v: avg_version_elo_per_version.get(v, 1000))
+        best_model = version_to_model.get(best_v)
+        if best_model:
+            prompt_best_model.setdefault(best_model, 0)
+            prompt_best_model[best_model] += 1
+    for model in model_comparison:
+        model_comparison[model]['num_prompts_with_highest_elo'] = prompt_best_model.get(model, 0)
+
+    # 2. Technique comparison (use global elo)
+    technique_comparison = {}
+    for technique, versions in technique_to_versions.items():
+        elos = [avg_global_elo_per_version.get(v, 1000) for v in versions]
+        technique_comparison[technique] = {
+            'avg_elo': sum(elos)/len(elos) if elos else 1000,
+            'num_prompt_versions': len(versions)
+        }
+    # Number of prompts where a prompt version using the technique had highest global elo
+    prompt_best_technique = {}
+    for prompt, versions in prompt_to_versions.items():
+        best_v = max(versions, key=lambda v: avg_global_elo_per_version.get(v, 1000))
+        best_tech = version_to_technique.get(best_v)
+        if best_tech:
+            prompt_best_technique.setdefault(best_tech, 0)
+            prompt_best_technique[best_tech] += 1
+    for technique in technique_comparison:
+        technique_comparison[technique]['num_prompts_with_highest_elo'] = prompt_best_technique.get(technique, 0)
+
+    # 3. Overall results
+    # Best prompt version per prompt (use avg global elo)
+    best_version_per_prompt = {}
+    best_version_per_prompt_technique = {}
+    for prompt, versions in prompt_to_versions.items():
+        best_v = max(versions, key=lambda v: avg_global_elo_per_version.get(v, 1000))
+        best_version_per_prompt[prompt] = best_v
+        best_version_per_prompt_technique[prompt] = version_to_technique.get(best_v)
+    # Best model per prompt (find avg version elo for each test run that uses specific model, return highest per model)
+    best_model_per_prompt = {}
+    for prompt, versions in prompt_to_versions.items():
+        model_scores = {}
+        for v in versions:
+            model = version_to_model.get(v)
+            if not model:
+                continue
+            score = avg_version_elo_per_version.get(v, 1000)
+            model_scores.setdefault(model, []).append(score)
+        # Find best model for this prompt
+        best_model = None
+        best_score = float('-inf')
+        for model, scores in model_scores.items():
+            avg_score = sum(scores)/len(scores) if scores else 0
+            if avg_score > best_score:
+                best_score = avg_score
+                best_model = model
+        if best_model:
+            best_model_per_prompt[prompt] = {'model': best_model, 'avg_version_elo': best_score}
+
+    # Prepare output
+    results = {
+        'model_comparison': model_comparison,
+        'technique_comparison': technique_comparison,
+        'best_version_per_prompt': best_version_per_prompt,
+        'best_version_per_prompt_technique': best_version_per_prompt_technique,
+        'best_model_per_prompt': best_model_per_prompt,
+        'avg_version_elo_per_version': avg_version_elo_per_version,
+        'avg_global_elo_per_version': avg_global_elo_per_version
+    }
+
+    # Print concise summary
+    print("\nMODEL COMPARISON:")
+    for model, data in model_comparison.items():
+        print(f"  {model}: avg_version_elo={data['avg_elo']:.2f}, #prompt_versions={data['num_prompt_versions']}, #prompts_with_highest_elo={data['num_prompts_with_highest_elo']}")
+    print("\nTECHNIQUE COMPARISON:")
+    for tech, data in technique_comparison.items():
+        print(f"  {tech}: avg_global_elo={data['avg_elo']:.2f}, #prompt_versions={data['num_prompt_versions']}, #prompts_with_highest_elo={data['num_prompts_with_highest_elo']}")
+    print("\nBEST PROMPT VERSION PER PROMPT:")
+    for prompt, version in best_version_per_prompt.items():
+        tech = best_version_per_prompt_technique.get(prompt)
+        print(f"  Prompt {prompt}: Version {version} (technique: {tech})")
+    print("\nBEST MODEL PER PROMPT:")
+    for prompt, info in best_model_per_prompt.items():
+        print(f"  Prompt {prompt}: Model {info['model']} (avg_version_elo={info['avg_version_elo']:.2f})")
+
+    # Save to JSON and Markdown
+    import datetime
+    import json
+    output_dir = args.output_dir
+    os.makedirs(output_dir, exist_ok=True)
+    timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+    json_path = os.path.join(output_dir, f'elo_custom_analysis_{timestamp}.json')
+    md_path = os.path.join(output_dir, f'elo_custom_analysis_{timestamp}.md')
+    with open(json_path, 'w', encoding='utf-8') as f:
+        json.dump(results, f, indent=2)
+    with open(md_path, 'w', encoding='utf-8') as f:
+        f.write(f"# ELO Custom Analysis ({timestamp})\n\n")
+        f.write("## Model Comparison\n")
+        for model, data in model_comparison.items():
+            f.write(f"- **{model}**: avg_version_elo={data['avg_elo']:.2f}, #prompt_versions={data['num_prompt_versions']}, #prompts_with_highest_elo={data['num_prompts_with_highest_elo']}\n")
+        f.write("\n## Technique Comparison\n")
+        for tech, data in technique_comparison.items():
+            f.write(f"- **{tech}**: avg_global_elo={data['avg_elo']:.2f}, #prompt_versions={data['num_prompt_versions']}, #prompts_with_highest_elo={data['num_prompts_with_highest_elo']}\n")
+        f.write("\n## Best Prompt Version Per Prompt\n")
+        for prompt, version in best_version_per_prompt.items():
+            tech = best_version_per_prompt_technique.get(prompt)
+            f.write(f"- Prompt {prompt}: Version {version} (technique: {tech})\n")
+        f.write("\n## Best Model Per Prompt\n")
+        for prompt, info in best_model_per_prompt.items():
+            f.write(f"- Prompt {prompt}: Model {info['model']} (avg_version_elo={info['avg_version_elo']:.2f})\n")
+    print(f"\nResults saved to {json_path} and {md_path}")
+    print("\n🎉 Custom ELO analysis completed successfully!")
+    sys.exit(0)
 
 if __name__ == "__main__":
     main()
