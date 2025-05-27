@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from typing import List, Dict, Any, Optional
 from app.services.ab_evaluator import ABTestingEvaluator
 from app.services.neo4j import Neo4jService
@@ -15,9 +15,12 @@ from app.api.models.prompt import (
 from datetime import datetime
 import uuid
 import logging
+import asyncio
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ab-testing")
+
+bulk_comparison_jobs = {}
 
 @router.post("/compare", response_model=ComparisonResult)
 async def compare_test_runs(
@@ -256,3 +259,63 @@ async def get_bulk_comparison_results(
     except Exception as e:
         logger.error(f"Error in get_bulk_comparison_results: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/compare/bulk")
+async def compare_bulk(
+    request: List[dict],
+    background_tasks: BackgroundTasks,
+    ab_evaluator: ABTestingEvaluator = Depends(get_ab_evaluator)
+):
+    """
+    Start a bulk comparison job and return a job_id instantly.
+    """
+    job_id = str(uuid.uuid4())
+    bulk_comparison_jobs[job_id] = {
+        "status": "pending",
+        "submitted_at": datetime.utcnow(),
+        "results": None,
+        "error": None,
+        "completed_at": None
+    }
+    background_tasks.add_task(_run_bulk_comparisons, job_id, request, ab_evaluator)
+    return {"job_id": job_id, "status": "pending", "submitted_at": bulk_comparison_jobs[job_id]["submitted_at"]}
+
+def _run_bulk_comparisons(job_id, request, ab_evaluator):
+    import asyncio
+    from datetime import datetime
+    try:
+        async def compare_pair(pair):
+            try:
+                result = await ab_evaluator.compare_test_runs(
+                    test_run_id1=pair.get("test_run_id1"),
+                    test_run_id2=pair.get("test_run_id2"),
+                    compare_within_version=pair.get("compare_within_version", False)
+                )
+                return {
+                    **pair,
+                    "id": result.get("id", str(uuid.uuid4())),
+                    "winner_test_run_id": result.get("winner_test_run_id"),
+                    "explanation": result.get("explanation", ""),
+                    "created_at": datetime.now(),
+                    "compare_within_version": result.get("compare_within_version", False)
+                }
+            except Exception as e:
+                return {**pair, "error": str(e)}
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        results = loop.run_until_complete(asyncio.gather(*(compare_pair(pair) for pair in request)))
+        bulk_comparison_jobs[job_id]["status"] = "completed"
+        bulk_comparison_jobs[job_id]["results"] = results
+        bulk_comparison_jobs[job_id]["completed_at"] = datetime.utcnow()
+    except Exception as e:
+        bulk_comparison_jobs[job_id]["status"] = "failed"
+        bulk_comparison_jobs[job_id]["error"] = str(e)
+        bulk_comparison_jobs[job_id]["completed_at"] = datetime.utcnow()
+
+@router.get("/compare/bulk/status/{job_id}")
+async def get_bulk_compare_status(job_id: str):
+    job = bulk_comparison_jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
