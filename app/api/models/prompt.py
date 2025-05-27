@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 from datetime import datetime
 
 class PromptRequest(BaseModel):
@@ -417,5 +417,5 @@ class BatchApplyTechniquesStatusResponse(BaseModel):
     status: str
     submitted_at: datetime
     completed_at: Optional[datetime] = None
-    results: Optional[Dict[str, Any]] = None  # Accepts a dict for batch apply techniques
+    results: Optional[Union[List[Any], Dict[str, Any]]] = None  # Accepts both list and dict
     error: Optional[str] = None
