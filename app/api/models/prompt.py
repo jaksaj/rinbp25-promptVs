@@ -417,5 +417,5 @@ class BatchApplyTechniquesStatusResponse(BaseModel):
     status: str
     submitted_at: datetime
     completed_at: Optional[datetime] = None
-    results: Optional[Dict[str, Dict[str, Optional[str]]]] = None  # {prompt_id: {technique: version_id}}
+    results: Optional[List[Any]] = None  # Accepts a list for batch test runs
     error: Optional[str] = None

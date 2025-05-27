@@ -236,46 +236,72 @@ class TestRunCreator:
         return all_running
     
     def run_test_runs(self, runs_per_version: int = 2) -> Dict[str, List[str]]:
-        """Run test runs for each prompt version"""
-        logger.info(f"Running {runs_per_version} test runs per version...")
-        
-        total_versions = sum(len(versions) for versions in self.prompt_versions.values())
-        total_runs = total_versions * len(self.test_models) * runs_per_version
-        current_run = 0
-        
-        logger.info(f"Total test runs to create: {total_runs}")
-        
+        """Run test runs for each prompt version using the batch endpoint"""
+        logger.info(f"Running {runs_per_version} test runs per version using batch endpoint...")
+
+        # Prepare batch requests: list of {version_id, model_name}
+        batch_requests = []
         for prompt_id, version_ids in self.prompt_versions.items():
             for version_id in version_ids:
-                self.test_runs[version_id] = []
-                
                 for model in self.test_models:
-                    for run_num in range(runs_per_version):
-                        current_run += 1
-                        logger.info(f"Creating test run {current_run}/{total_runs}: version {version_id}, model {model}, run {run_num + 1}")
-                        
-                        try:
-                            # Run test and save with longer timeout for model inference
-                            response = self._make_request(
-                                'POST',
-                                f'/api/test-prompt-and-save',
-                                params={
-                                    'version_id': version_id,
-                                    'model_name': model
-                                },
-                                timeout=120  # Increased timeout for model inference
-                            )
-                            result = response.json()
-                            test_run_id = result['run_id']
-                            self.test_runs[version_id].append(test_run_id)
-                            
-                            logger.info(f"Created test run {test_run_id} successfully")
-                            
-                        except Exception as e:
-                            logger.error(f"Failed to run test for version {version_id} with model {model}: {e}")
-                            # Continue with other tests even if one fails
-        
-        return self.test_runs
+                    for _ in range(runs_per_version):
+                        batch_requests.append({
+                            "version_id": version_id,
+                            "model_name": model
+                        })
+
+        logger.info(f"Total test runs to create (batch): {len(batch_requests)}")
+
+        # Send batch request
+        try:
+            response = self._make_request(
+                'POST',
+                '/api/test-prompt-and-save/batch',
+                data=batch_requests,
+                timeout=10  # Short timeout for submission
+            )
+            job_info = response.json()
+            job_id = job_info.get("job_id")
+            if not job_id:
+                raise Exception(f"Batch endpoint did not return a job_id: {job_info}")
+            logger.info(f"Batch job submitted, job_id: {job_id}")
+        except Exception as e:
+            logger.error(f"Failed to submit batch test run job: {e}")
+            raise
+
+        # Poll for completion
+        poll_url = f"/api/techniques/batch-status/{job_id}"
+        max_wait = 1800  # 30 minutes max
+        poll_interval = 5
+        waited = 0
+        while waited < max_wait:
+            time.sleep(poll_interval)
+            waited += poll_interval
+            try:
+                poll_resp = self._make_request('GET', poll_url, timeout=30)
+                poll_data = poll_resp.json()
+                status = poll_data.get("status")
+                if status == "completed":
+                    logger.info(f"Batch test runs completed after {waited} seconds.")
+                    results = poll_data.get("results", [])
+                    # Organize results by version_id
+                    for item in results:
+                        version_id = item.get("version_id")
+                        run_id = item.get("run_id")
+                        if version_id and run_id:
+                            if version_id not in self.test_runs:
+                                self.test_runs[version_id] = []
+                            self.test_runs[version_id].append(run_id)
+                    return self.test_runs
+                elif status == "failed":
+                    logger.error(f"Batch test runs failed: {poll_data.get('error')}")
+                    raise Exception(f"Batch test runs failed: {poll_data.get('error')}")
+                else:
+                    logger.info(f"Batch job status: {status} (waited {waited}s)")
+            except Exception as e:
+                logger.warning(f"Polling batch job failed: {e}")
+        logger.error(f"Batch test runs did not complete within {max_wait} seconds.")
+        raise TimeoutError(f"Batch test runs did not complete within {max_wait} seconds.")
     
     def save_results(self, filename: str = "../output/test_runs.json") -> str:
         """Save test run data for next script"""

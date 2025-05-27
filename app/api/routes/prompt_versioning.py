@@ -432,3 +432,92 @@ async def get_batch_apply_techniques_status(job_id: str):
         results=job["results"],
         error=job["error"]
     )
+
+# Batch test-prompt-and-save endpoint
+@router.post("/test-prompt-and-save/batch", response_model=Dict[str, Any])
+async def test_prompt_and_save_batch(
+    requests: List[Dict[str, str]],  # Each dict: {"version_id": ..., "model_name": ...}
+    background_tasks: BackgroundTasks,
+    neo4j_service: Neo4jService = Depends(get_neo4j_service),
+    ollama_service: OllamaService = Depends(get_ollama_service)
+):
+    """Batch test-prompt-and-save for multiple version/model pairs."""
+    job_id = str(uuid4())
+    submitted_at = datetime.utcnow()
+    batch_jobs[job_id] = {
+        "status": "pending",
+        "submitted_at": submitted_at,
+        "results": None,
+        "error": None,
+        "completed_at": None
+    }
+    background_tasks.add_task(_run_batch_test_prompt_and_save, job_id, requests, neo4j_service, ollama_service)
+    return {"job_id": job_id, "status": "pending", "submitted_at": submitted_at}
+
+
+def _run_batch_test_prompt_and_save(job_id, requests, neo4j_service, ollama_service):
+    import time
+    results = []
+    try:
+        for req in requests:
+            version_id = req.get("version_id")
+            model_name = req.get("model_name")
+            try:
+                # Check if model is running
+                running_models = ollama_service.list_running_models()
+                running_model_names = [model.name for model in running_models]
+                if model_name not in running_model_names:
+                    results.append({
+                        "version_id": version_id,
+                        "model_name": model_name,
+                        "error": f"Model {model_name} is not running"
+                    })
+                    continue
+                # Get prompt version
+                prompt_version = neo4j_service.get_prompt_version(version_id)
+                if not prompt_version:
+                    results.append({
+                        "version_id": version_id,
+                        "model_name": model_name,
+                        "error": f"Prompt version with ID {version_id} not found"
+                    })
+                    continue
+                prompt_content = prompt_version["content"]
+                start_time = time.time()
+                result = ollama_service.process_prompt(prompt_content, model_name)
+                end_time = time.time()
+                latency_ms = int((end_time - start_time) * 1000)
+                token_count = len(result.split())
+                token_per_second = token_count / ((end_time - start_time) or 1)
+                metrics = TestRunMetrics(
+                    latency_ms=latency_ms,
+                    token_count=token_count,
+                    token_per_second=token_per_second
+                )
+                test_run = TestRunCreate(
+                    prompt_version_id=version_id,
+                    model_used=model_name,
+                    output=result,
+                    metrics=metrics,
+                    input_params={"used_stored_prompt": True}
+                )
+                test_run_id = neo4j_service.create_test_run(test_run)
+                results.append({
+                    "version_id": version_id,
+                    "model_name": model_name,
+                    "run_id": test_run_id,
+                    "result": result
+                })
+            except Exception as e:
+                results.append({
+                    "version_id": version_id,
+                    "model_name": model_name,
+                    "error": str(e)
+                })
+        batch_jobs[job_id]["status"] = "completed"
+        batch_jobs[job_id]["results"] = results
+        batch_jobs[job_id]["completed_at"] = datetime.utcnow()
+    except Exception as e:
+        batch_jobs[job_id]["status"] = "failed"
+        batch_jobs[job_id]["error"] = str(e)
+        batch_jobs[job_id]["completed_at"] = datetime.utcnow()
