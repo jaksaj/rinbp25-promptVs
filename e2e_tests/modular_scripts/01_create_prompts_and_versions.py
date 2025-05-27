@@ -250,7 +250,7 @@ class PromptCreator:
             logger.info(f"Created prompt '{prompt_config['name']}' with ID: {prompt_id}")
         return self.prompt_ids
     
-    def create_prompt_versions(self, techniques: List[str] = ['cot_simple', 'cot_reasoning']) -> Dict[str, List[str]]:
+    def create_prompt_versions(self, techniques: List[str] = ['control', 'cot_reasoning', 'cot_simple']) -> Dict[str, List[str]]:
         """Create prompt versions using different techniques via batch endpoint and poll for results."""
         logger.info(f"Creating prompt versions using techniques: {techniques} (batch mode)")
         batch_data = {
