@@ -17,11 +17,12 @@ class SamplingStrategies:
     """Smart sampling strategies for test run comparisons"""
     
     @staticmethod
-    def group_test_runs_by_model(test_run_ids: List[str], get_model_func) -> Dict[str, List[str]]:
-        """Group test runs by their model"""
+    def group_test_runs_by_model(test_run_objs: List[dict], get_model_func) -> Dict[str, List[str]]:
+        """Group test runs by their model (expects list of test run dicts)"""
         runs_by_model = {}
-        for run_id in test_run_ids:
-            model = get_model_func(run_id)
+        for run in test_run_objs:
+            model = get_model_func(run)
+            run_id = run['run_id'] if isinstance(run, dict) and 'run_id' in run else run
             if model:
                 if model not in runs_by_model:
                     runs_by_model[model] = []
@@ -29,13 +30,12 @@ class SamplingStrategies:
         return runs_by_model
     
     @staticmethod
-    def smart_sampling_strategy(version_test_runs1: List[str], version_test_runs2: List[str], 
+    def smart_sampling_strategy(version_test_runs1: List[dict], version_test_runs2: List[dict], 
                               max_comparisons: int = 3, get_model_func=None) -> List[Tuple[str, str]]:
-        """Select representative test run pairs for comparison with smart sampling"""
+        """Select representative test run pairs for comparison with smart sampling (expects test run dicts)"""
         
         if not get_model_func:
-            # Fallback to random sampling if no model extraction function provided
-            all_pairs = [(r1, r2) for r1 in version_test_runs1 for r2 in version_test_runs2]
+            all_pairs = [(r1['run_id'], r2['run_id']) for r1 in version_test_runs1 for r2 in version_test_runs2]
             random.shuffle(all_pairs)
             return all_pairs[:max_comparisons]
         
@@ -56,7 +56,7 @@ class SamplingStrategies:
         
         # Priority 2: Fill remaining slots with random pairs if needed
         if len(selected_pairs) < max_comparisons:
-            all_pairs = [(r1, r2) for r1 in version_test_runs1 for r2 in version_test_runs2]
+            all_pairs = [(r1['run_id'], r2['run_id']) for r1 in version_test_runs1 for r2 in version_test_runs2]
             remaining_pairs = [pair for pair in all_pairs if pair not in selected_pairs]
             random.shuffle(remaining_pairs)
             

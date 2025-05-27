@@ -43,7 +43,8 @@ class ComparisonEngine:
             for i, model1 in enumerate(models):
                 for model2 in models[i+1:]:
                     selected_pairs = SamplingStrategies.smart_sampling_strategy(
-                        runs_by_model[model1], runs_by_model[model2],
+                        [run for run in test_run_list if self.api_manager.get_test_run_model(run) == model1],
+                        [run for run in test_run_list if self.api_manager.get_test_run_model(run) == model2],
                         self.max_comparisons_per_version_pair,
                         self.api_manager.get_test_run_model
                     )

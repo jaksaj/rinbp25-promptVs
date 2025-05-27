@@ -208,20 +208,10 @@ class APIManager:
             logger.error(f"Failed to ensure evaluation model is available: {e}")
             return False
         
-    def get_test_run_model(self, test_run_id: str) -> Optional[str]:
-        """Extract model name from test run ID or fetch from API"""
-        try:
-            # Try to extract model from test run ID pattern
-            if '_' in test_run_id:
-                parts = test_run_id.split('_')
-                if len(parts) >= 3:
-                    return parts[2]  # Assuming pattern: prompt_version_model_timestamp
-            
-            # Fallback: fetch from API
-            response = self._make_request('GET', f'/api/test-runs/{test_run_id}')
-            test_run_data = response.json()
-            # Use 'model_used' field instead of 'model_name' to match actual API response
-            return test_run_data.get('model_used') or test_run_data.get('model_name')
-        except Exception as e:
-            logger.warning(f"Could not determine model for test run {test_run_id}: {e}")
-            return None
+    def get_test_run_model(self, test_run: dict) -> str:
+        """Return model name from test run dict (strict, raises if missing)"""
+        if not isinstance(test_run, dict):
+            raise ValueError(f"Test run must be a dict, got {type(test_run)}: {test_run}")
+        if 'model_name' not in test_run or not test_run['model_name']:
+            raise ValueError(f"Test run dict missing 'model_name': {test_run}")
+        return test_run['model_name']

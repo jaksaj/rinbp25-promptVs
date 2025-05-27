@@ -284,14 +284,18 @@ class TestRunCreator:
                 if status == "completed":
                     logger.info(f"Batch test runs completed after {waited} seconds.")
                     results = poll_data.get("results", [])
-                    # Organize results by version_id
+                    # Organize results by version_id, saving run_id and model_name
                     for item in results:
                         version_id = item.get("version_id")
                         run_id = item.get("run_id")
-                        if version_id and run_id:
+                        model_name = item.get("model_name")
+                        if version_id and run_id and model_name:
                             if version_id not in self.test_runs:
                                 self.test_runs[version_id] = []
-                            self.test_runs[version_id].append(run_id)
+                            self.test_runs[version_id].append({
+                                'run_id': run_id,
+                                'model_name': model_name
+                            })
                     return self.test_runs
                 elif status == "failed":
                     logger.error(f"Batch test runs failed: {poll_data.get('error')}")
@@ -311,7 +315,7 @@ class TestRunCreator:
             'prompt_group_id': self.prompt_group_id,
             'prompt_ids': self.prompt_ids,
             'prompt_versions': self.prompt_versions,
-            'test_runs': self.test_runs,
+            'test_runs': self.test_runs,  # Now contains run_id and model_name per run
             'test_models': self.test_models,
             'total_test_runs': sum(len(runs) for runs in self.test_runs.values())
         }

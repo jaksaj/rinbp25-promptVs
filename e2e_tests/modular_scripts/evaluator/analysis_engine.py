@@ -50,9 +50,11 @@ class AnalysisEngine:
                 # Find which version the winning test run belongs to
                 if winner_test_run_id:
                     for version_id in [version_id1, version_id2]:
-                        if winner_test_run_id in test_runs.get(version_id, []):
-                            version_wins[version_id] = version_wins.get(version_id, 0) + 1
-                            break
+                        for run in test_runs.get(version_id, []):
+                            run_id = run['run_id'] if isinstance(run, dict) and 'run_id' in run else run
+                            if winner_test_run_id == run_id:
+                                version_wins[version_id] = version_wins.get(version_id, 0) + 1
+                                break
             
             # Find the version with most wins
             if version_wins:
@@ -98,9 +100,10 @@ class AnalysisEngine:
                 # Find which model the winning test run belongs to
                 if winner_test_run_id:
                     for model in [model1, model2]:
-                        if model and winner_test_run_id in runs_by_model.get(model, []):
-                            model_wins[model] = model_wins.get(model, 0) + 1
-                            break
+                        for run_id in runs_by_model.get(model, []):
+                            if winner_test_run_id == run_id:
+                                model_wins[model] = model_wins.get(model, 0) + 1
+                                break
             
             # Find the model with most wins
             if model_wins and any(wins > 0 for wins in model_wins.values()):
@@ -144,10 +147,12 @@ class AnalysisEngine:
             if prompt_id and version_id1 and version_id2 and winner_test_run_id:
                 # Determine which version won
                 winner_version_id = None
-                if winner_test_run_id in test_runs.get(version_id1, []):
-                    winner_version_id = version_id1
-                elif winner_test_run_id in test_runs.get(version_id2, []):
-                    winner_version_id = version_id2
+                for version_id in [version_id1, version_id2]:
+                    for run in test_runs.get(version_id, []):
+                        run_id = run['run_id'] if isinstance(run, dict) and 'run_id' in run else run
+                        if winner_test_run_id == run_id:
+                            winner_version_id = version_id
+                            break
                 
                 # Map version to technique
                 version_ids = prompt_versions.get(prompt_id, [])
@@ -185,8 +190,10 @@ class AnalysisEngine:
                         model_wins[model] = 0
                     
                     model_totals[model] += 1
-                    if winner_test_run_id in runs_by_model.get(model, []):
-                        model_wins[model] += 1
+                    for run_id in runs_by_model.get(model, []):
+                        if winner_test_run_id == run_id:
+                            model_wins[model] += 1
+                            break
         
         # Calculate win rates
         technique_performance = {}
