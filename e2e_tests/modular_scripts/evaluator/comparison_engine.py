@@ -7,6 +7,7 @@ Handles A/B testing comparisons between prompt versions and models.
 """
 
 import logging
+import requests
 from typing import List, Dict, Any
 from .sampling_strategies import SamplingStrategies
 
@@ -75,42 +76,63 @@ class ComparisonEngine:
         if not job_id:
             logger.error(f"No job_id returned from bulk compare endpoint: {job_info}")
             return []
-        logger.info(f"Bulk comparison job submitted. job_id={job_id}")
-        # Poll for completion
+        logger.info(f"Bulk comparison job submitted. job_id={job_id}")        # Poll for completion
         import time
         poll_interval = 5
         max_wait = 3600  # 1 hour max
         waited = 0
+        consecutive_failures = 0
+        max_consecutive_failures = 3
+        
         while True:
-            status_resp = self.api_manager._make_request(
-                'GET',
-                f'/api/ab-testing/compare/bulk/status/{job_id}',
-                None,
-                timeout=30
-            )
-            status = status_resp.json()
-            if status.get("status") == "completed":
-                results = status.get("results", [])
-                logger.info(f"Bulk comparison job completed with {len(results)} results.")
-                for result, meta in zip(results, pair_metadata):
-                    result['version_id'] = meta['version_id']
-                    result['model1'] = meta['model1']
-                    result['model2'] = meta['model2']
-                    result['comparison_type'] = 'model_comparison'
-                    self.model_comparison_results.append(result)
-                    winner = result.get('winner_test_run_id', 'unknown')
-                    logger.info(f"Model comparison completed. Winner: {winner}")
-                break
-            elif status.get("status") == "failed":
-                logger.error(f"Bulk comparison job failed: {status.get('error')}")
-                break
-            else:
-                logger.info(f"Bulk comparison job status: {status.get('status')}, waiting {poll_interval}s...")
-                time.sleep(poll_interval)
-                waited += poll_interval
-                if waited > max_wait:
-                    logger.error("Bulk comparison job timed out.")
+            try:
+                status_resp = self.api_manager._make_request(
+                    'GET',
+                    f'/api/ab-testing/compare/bulk/status/{job_id}',
+                    None,
+                    timeout=30
+                )
+                status = status_resp.json()
+                consecutive_failures = 0  # Reset failure counter on success
+                
+                if status.get("status") == "completed":
+                    results = status.get("results", [])
+                    logger.info(f"Bulk comparison job completed with {len(results)} results.")
+                    for result, meta in zip(results, pair_metadata):
+                        result['version_id'] = meta['version_id']
+                        result['model1'] = meta['model1']
+                        result['model2'] = meta['model2']
+                        result['comparison_type'] = 'model_comparison'
+                        self.model_comparison_results.append(result)
+                        winner = result.get('winner_test_run_id', 'unknown')
+                        logger.info(f"Model comparison completed. Winner: {winner}")
                     break
+                elif status.get("status") == "failed":
+                    logger.error(f"Bulk comparison job failed: {status.get('error')}")
+                    break
+                else:
+                    logger.info(f"Bulk comparison job status: {status.get('status')}, waiting {poll_interval}s...")
+                    time.sleep(poll_interval)
+                    waited += poll_interval
+                    if waited > max_wait:
+                        logger.error("Bulk comparison job timed out.")
+                        break
+                        
+            except Exception as e:
+                consecutive_failures += 1
+                logger.warning(f"Polling request failed (attempt {consecutive_failures}/{max_consecutive_failures}): {e}")
+                
+                if consecutive_failures >= max_consecutive_failures:
+                    logger.error("Too many consecutive polling failures, giving up.")
+                    break
+                
+                # Reset session to handle connection issues
+                self.api_manager.session.close()
+                self.api_manager.session = requests.Session()
+                
+                # Wait a bit longer before retrying
+                time.sleep(poll_interval * 2)
+                waited += poll_interval * 2
         logger.info(f"Completed {len(self.model_comparison_results)} model comparisons")
         return self.model_comparison_results
     
@@ -168,41 +190,62 @@ class ComparisonEngine:
         if not job_id:
             logger.error(f"No job_id returned from bulk compare endpoint: {job_info}")
             return []
-        logger.info(f"Bulk comparison job submitted. job_id={job_id}")
-        # Poll for completion
+        logger.info(f"Bulk comparison job submitted. job_id={job_id}")        # Poll for completion
         import time
         poll_interval = 5
         max_wait = 3600  # 1 hour max
         waited = 0
+        consecutive_failures = 0
+        max_consecutive_failures = 3
+        
         while True:
-            status_resp = self.api_manager._make_request(
-                'GET',
-                f'/api/ab-testing/compare/bulk/status/{job_id}',
-                None,
-                timeout=30
-            )
-            status = status_resp.json()
-            if status.get("status") == "completed":
-                results = status.get("results", [])
-                logger.info(f"Bulk comparison job completed with {len(results)} results.")
-                for result, meta in zip(results, pair_metadata):
-                    result['prompt_id'] = meta['prompt_id']
-                    result['version_id1'] = meta['version_id1']
-                    result['version_id2'] = meta['version_id2']
-                    result['comparison_type'] = 'version_comparison'
-                    self.comparison_results.append(result)
-                    winner = result.get('winner_test_run_id', 'unknown')
-                    logger.info(f"Version comparison completed. Winner: {winner}")
-                break
-            elif status.get("status") == "failed":
-                logger.error(f"Bulk comparison job failed: {status.get('error')}")
-                break
-            else:
-                logger.info(f"Bulk comparison job status: {status.get('status')}, waiting {poll_interval}s...")
-                time.sleep(poll_interval)
-                waited += poll_interval
-                if waited > max_wait:
-                    logger.error("Bulk comparison job timed out.")
+            try:
+                status_resp = self.api_manager._make_request(
+                    'GET',
+                    f'/api/ab-testing/compare/bulk/status/{job_id}',
+                    None,
+                    timeout=30
+                )
+                status = status_resp.json()
+                consecutive_failures = 0  # Reset failure counter on success
+                
+                if status.get("status") == "completed":
+                    results = status.get("results", [])
+                    logger.info(f"Bulk comparison job completed with {len(results)} results.")
+                    for result, meta in zip(results, pair_metadata):
+                        result['prompt_id'] = meta['prompt_id']
+                        result['version_id1'] = meta['version_id1']
+                        result['version_id2'] = meta['version_id2']
+                        result['comparison_type'] = 'version_comparison'
+                        self.comparison_results.append(result)
+                        winner = result.get('winner_test_run_id', 'unknown')
+                        logger.info(f"Version comparison completed. Winner: {winner}")
                     break
+                elif status.get("status") == "failed":
+                    logger.error(f"Bulk comparison job failed: {status.get('error')}")
+                    break
+                else:
+                    logger.info(f"Bulk comparison job status: {status.get('status')}, waiting {poll_interval}s...")
+                    time.sleep(poll_interval)
+                    waited += poll_interval
+                    if waited > max_wait:
+                        logger.error("Bulk comparison job timed out.")
+                        break
+                        
+            except Exception as e:
+                consecutive_failures += 1
+                logger.warning(f"Polling request failed (attempt {consecutive_failures}/{max_consecutive_failures}): {e}")
+                
+                if consecutive_failures >= max_consecutive_failures:
+                    logger.error("Too many consecutive polling failures, giving up.")
+                    break
+                
+                # Reset session to handle connection issues
+                self.api_manager.session.close()
+                self.api_manager.session = requests.Session()
+                
+                # Wait a bit longer before retrying
+                time.sleep(poll_interval * 2)
+                waited += poll_interval * 2
         logger.info(f"Completed {len(self.comparison_results)} version comparisons")
         return self.comparison_results

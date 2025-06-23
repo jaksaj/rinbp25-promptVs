@@ -288,13 +288,13 @@ python run_all_scripts.py --runs-per-version 3 --include-analysis --verbose
 python 01_create_prompts_and_versions.py --verbose
 
 # Step 2: Create test runs (run 3 times per version)
-python 02_create_test_runs.py --runs-per-version 3 --verbose
+python 02_create_test_runs.py --runs-per-version 1 --verbose
 
 # Step 3: Perform evaluations
 python 03_ab_testing_evaluations.py --verbose
 
 # Step 4: Analyze ELO ratings and generate insights
-python 04_elo_rating_analysis.py --input evaluation_report_20250526_150026.json --verbose
+python 04_elo_rating_analysis.py --input ../output/evaluation_report_20250623_232222.json --verbose
 ```
 
 ### Restart from a Specific Point

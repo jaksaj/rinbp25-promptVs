@@ -384,6 +384,45 @@ class Neo4jService:
             logger.error(f"Error creating test run: {str(e)}")
             raise
 
+    def update_test_run(self, test_run_id: str, updates: Dict[str, Any]) -> bool:
+        """
+        Update properties of an existing test run.
+        
+        Args:
+            test_run_id: ID of the test run to update
+            updates: Dictionary of properties to update
+            
+        Returns:
+            True if update was successful, False otherwise
+        """
+        try:
+            with self.driver.session(database=NEO4J_DATABASE) as session:
+                # Build the SET clause dynamically based on the updates
+                set_clauses = []
+                params = {"test_run_id": test_run_id}
+                
+                for key, value in updates.items():
+                    param_name = f"param_{key}"
+                    set_clauses.append(f"tr.{key} = ${param_name}")
+                    params[param_name] = value
+                
+                if not set_clauses:
+                    return True  # Nothing to update
+                
+                query = f"""
+                MATCH (tr:TestRun {{id: $test_run_id}})
+                SET {', '.join(set_clauses)}
+                RETURN tr.id as id
+                """
+                
+                result = session.run(query, **params)
+                record = result.single()
+                return record is not None
+                
+        except Exception as e:
+            logger.error(f"Error updating test run {test_run_id}: {str(e)}")
+            raise
+
     def get_test_runs(self, prompt_version_id: str) -> List[Dict]:
         """Get all test runs for a specific prompt version."""
         try:

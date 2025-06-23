@@ -514,17 +514,25 @@ def main():
             with open(args.input, 'r', encoding='utf-8') as f2:
                 logger.warning(f"First 200 chars of file: {f2.read(200)}")
     except Exception as e:
-        logger.warning(f"Could not load runs_by_version from evaluation report: {e}")
-
-    # Build reverse mappings for model and technique
+        logger.warning(f"Could not load runs_by_version from evaluation report: {e}")    # Build reverse mappings for model and technique
     model_to_runs = {}
     technique_to_versions = {}
     prompt_to_versions = {}
     version_to_prompt = {}
     version_to_model = {}
     version_to_technique = {}
+    
+    # NEW: Track correctness by model and technique
+    model_correctness = {}
+    technique_correctness = {}
+    
     for tr in test_run_metadata.values():
         version = tr.get('prompt_version_id')
+        tr_id = tr.get('id')
+        
+        # Get correctness information
+        is_correct = tr.get('is_correct')
+        
         # Fallback: get prompt from test run metadata or from prompt_version_metadata
         prompt = tr.get('prompt_id')
         if not prompt and version and version in prompt_version_metadata:
@@ -542,6 +550,27 @@ def main():
             if not technique:
                 # Try to infer from 'version' or 'notes' fields
                 technique = prompt_version_metadata[version].get('version') or prompt_version_metadata[version].get('notes')
+        
+        # Track correctness by model
+        if model and is_correct is not None:
+            if model not in model_correctness:
+                model_correctness[model] = {'correct': 0, 'incorrect': 0, 'total': 0}
+            if is_correct:
+                model_correctness[model]['correct'] += 1
+            else:
+                model_correctness[model]['incorrect'] += 1
+            model_correctness[model]['total'] += 1
+        
+        # Track correctness by technique
+        if technique and is_correct is not None:
+            if technique not in technique_correctness:
+                technique_correctness[technique] = {'correct': 0, 'incorrect': 0, 'total': 0}
+            if is_correct:
+                technique_correctness[technique]['correct'] += 1
+            else:
+                technique_correctness[technique]['incorrect'] += 1
+            technique_correctness[technique]['total'] += 1
+        
         if model and version:
             model_to_runs.setdefault(model, []).append(version)
             version_to_model[version] = model
@@ -562,9 +591,7 @@ def main():
             version_elo.setdefault(version, []).append(elo_ratings[tr_id].get('version_elo_score', 1000))
             version_global_elo.setdefault(version, []).append(elo_ratings[tr_id].get('global_elo_score', 1000))
     avg_version_elo_per_version = {v: sum(scores)/len(scores) for v, scores in version_elo.items() if scores}
-    avg_global_elo_per_version = {v: sum(scores)/len(scores) for v, scores in version_global_elo.items() if scores}
-
-    # 1. Model comparison (use version elo)
+    avg_global_elo_per_version = {v: sum(scores)/len(scores) for v, scores in version_global_elo.items() if scores}    # 1. Model comparison (use version elo)
     model_comparison = {}
     for model, versions in model_to_runs.items():
         elos = [avg_version_elo_per_version.get(v, 1000) for v in versions]
@@ -572,6 +599,23 @@ def main():
             'avg_elo': sum(elos)/len(elos) if elos else 1000,
             'num_prompt_versions': len(versions)
         }
+        
+        # Add correctness metrics
+        if model in model_correctness:
+            correctness = model_correctness[model]
+            model_comparison[model]['correctness'] = {
+                'correct': correctness['correct'],
+                'incorrect': correctness['incorrect'],
+                'total': correctness['total'],
+                'accuracy': correctness['correct'] / correctness['total'] if correctness['total'] > 0 else 0
+            }
+        else:
+            model_comparison[model]['correctness'] = {
+                'correct': 0,
+                'incorrect': 0,
+                'total': 0,
+                'accuracy': 0
+            }
     # Number of prompt versions where the model's test run had highest version elo
     prompt_best_model = {}
     for prompt, versions in prompt_to_versions.items():
@@ -581,9 +625,7 @@ def main():
             prompt_best_model.setdefault(best_model, 0)
             prompt_best_model[best_model] += 1
     for model in model_comparison:
-        model_comparison[model]['num_prompts_with_highest_elo'] = prompt_best_model.get(model, 0)
-
-    # 2. Technique comparison (use global elo)
+        model_comparison[model]['num_prompts_with_highest_elo'] = prompt_best_model.get(model, 0)    # 2. Technique comparison (use global elo)
     technique_comparison = {}
     for technique, versions in technique_to_versions.items():
         elos = [avg_global_elo_per_version.get(v, 1000) for v in versions]
@@ -591,6 +633,23 @@ def main():
             'avg_elo': sum(elos)/len(elos) if elos else 1000,
             'num_prompt_versions': len(versions)
         }
+        
+        # Add correctness metrics
+        if technique in technique_correctness:
+            correctness = technique_correctness[technique]
+            technique_comparison[technique]['correctness'] = {
+                'correct': correctness['correct'],
+                'incorrect': correctness['incorrect'],
+                'total': correctness['total'],
+                'accuracy': correctness['correct'] / correctness['total'] if correctness['total'] > 0 else 0
+            }
+        else:
+            technique_comparison[technique]['correctness'] = {
+                'correct': 0,
+                'incorrect': 0,
+                'total': 0,
+                'accuracy': 0
+            }
     # Number of prompts where a prompt version using the technique had highest global elo
     prompt_best_technique = {}
     for prompt, versions in prompt_to_versions.items():
@@ -629,26 +688,45 @@ def main():
                 best_score = avg_score
                 best_model = model
         if best_model:
-            best_model_per_prompt[prompt] = {'model': best_model, 'avg_version_elo': best_score}
-
-    # Prepare output
+            best_model_per_prompt[prompt] = {'model': best_model, 'avg_version_elo': best_score}    # Prepare output
     results = {
         'model_comparison': model_comparison,
         'technique_comparison': technique_comparison,
+        'model_correctness': model_correctness,
+        'technique_correctness': technique_correctness,
         'best_version_per_prompt': best_version_per_prompt,
         'best_version_per_prompt_technique': best_version_per_prompt_technique,
         'best_model_per_prompt': best_model_per_prompt,
         'avg_version_elo_per_version': avg_version_elo_per_version,
         'avg_global_elo_per_version': avg_global_elo_per_version
-    }
-
-    # Print concise summary
+    }    # Print concise summary
     print("\nMODEL COMPARISON:")
     for model, data in model_comparison.items():
-        print(f"  {model}: avg_version_elo={data['avg_elo']:.2f}, #prompt_versions={data['num_prompt_versions']}, #prompts_with_highest_elo={data['num_prompts_with_highest_elo']}")
+        correctness = data['correctness']
+        print(f"  {model}:")
+        print(f"    - avg_version_elo: {data['avg_elo']:.2f}")
+        print(f"    - #prompt_versions: {data['num_prompt_versions']}")
+        print(f"    - #prompts_with_highest_elo: {data['num_prompts_with_highest_elo']}")
+        print(f"    - correctness: {correctness['correct']}/{correctness['total']} ({correctness['accuracy']:.1%} accurate)")
+    
     print("\nTECHNIQUE COMPARISON:")
     for tech, data in technique_comparison.items():
-        print(f"  {tech}: avg_global_elo={data['avg_elo']:.2f}, #prompt_versions={data['num_prompt_versions']}, #prompts_with_highest_elo={data['num_prompts_with_highest_elo']}")
+        correctness = data['correctness']
+        print(f"  {tech}:")
+        print(f"    - avg_global_elo: {data['avg_elo']:.2f}")
+        print(f"    - #prompt_versions: {data['num_prompt_versions']}")
+        print(f"    - #prompts_with_highest_elo: {data['num_prompts_with_highest_elo']}")
+        print(f"    - correctness: {correctness['correct']}/{correctness['total']} ({correctness['accuracy']:.1%} accurate)")
+    
+    print("\nCORRECTNESS SUMMARY BY MODEL:")
+    for model, stats in model_correctness.items():
+        accuracy = stats['correct'] / stats['total'] if stats['total'] > 0 else 0
+        print(f"  {model}: {stats['correct']} correct, {stats['incorrect']} incorrect, {stats['total']} total ({accuracy:.1%} accuracy)")
+    
+    print("\nCORRECTNESS SUMMARY BY TECHNIQUE:")
+    for technique, stats in technique_correctness.items():
+        accuracy = stats['correct'] / stats['total'] if stats['total'] > 0 else 0
+        print(f"  {technique}: {stats['correct']} correct, {stats['incorrect']} incorrect, {stats['total']} total ({accuracy:.1%} accuracy)")
     print("\nBEST PROMPT VERSION PER PROMPT:")
     for prompt, version in best_version_per_prompt.items():
         tech = best_version_per_prompt_technique.get(prompt)
@@ -665,24 +743,84 @@ def main():
     timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
     json_path = os.path.join(output_dir, f'elo_custom_analysis_{timestamp}.json')
     md_path = os.path.join(output_dir, f'elo_custom_analysis_{timestamp}.md')
+    
     with open(json_path, 'w', encoding='utf-8') as f:
         json.dump(results, f, indent=2)
+    
     with open(md_path, 'w', encoding='utf-8') as f:
         f.write(f"# ELO Custom Analysis ({timestamp})\n\n")
         f.write("## Model Comparison\n")
         for model, data in model_comparison.items():
-            f.write(f"- **{model}**: avg_version_elo={data['avg_elo']:.2f}, #prompt_versions={data['num_prompt_versions']}, #prompts_with_highest_elo={data['num_prompts_with_highest_elo']}\n")
-        f.write("\n## Technique Comparison\n")
+            correctness = data['correctness']
+            f.write(f"### {model}\n")
+            f.write(f"- **Average Version ELO**: {data['avg_elo']:.2f}\n")
+            f.write(f"- **Prompt Versions**: {data['num_prompt_versions']}\n")
+            f.write(f"- **Prompts with Highest ELO**: {data['num_prompts_with_highest_elo']}\n")
+            f.write(f"- **Correctness**: {correctness['correct']}/{correctness['total']} ({correctness['accuracy']:.1%} accurate)\n\n")
+        
+        f.write("## Technique Comparison\n")
         for tech, data in technique_comparison.items():
-            f.write(f"- **{tech}**: avg_global_elo={data['avg_elo']:.2f}, #prompt_versions={data['num_prompt_versions']}, #prompts_with_highest_elo={data['num_prompts_with_highest_elo']}\n")
+            correctness = data['correctness']
+            f.write(f"### {tech}\n")
+            f.write(f"- **Average Global ELO**: {data['avg_elo']:.2f}\n")
+            f.write(f"- **Prompt Versions**: {data['num_prompt_versions']}\n")
+            f.write(f"- **Prompts with Highest ELO**: {data['num_prompts_with_highest_elo']}\n")
+            f.write(f"- **Correctness**: {correctness['correct']}/{correctness['total']} ({correctness['accuracy']:.1%} accurate)\n\n")
+        
+        f.write("## Correctness Summary by Model\n")
+        for model, stats in model_correctness.items():
+            accuracy = stats['correct'] / stats['total'] if stats['total'] > 0 else 0
+            f.write(f"- **{model}**: {stats['correct']} correct, {stats['incorrect']} incorrect, {stats['total']} total ({accuracy:.1%} accuracy)\n")
+        
+        f.write("\n## Correctness Summary by Technique\n")
+        for technique, stats in technique_correctness.items():
+            accuracy = stats['correct'] / stats['total'] if stats['total'] > 0 else 0
+            f.write(f"- **{technique}**: {stats['correct']} correct, {stats['incorrect']} incorrect, {stats['total']} total ({accuracy:.1%} accuracy)\n")
+        
         f.write("\n## Best Prompt Version Per Prompt\n")
         for prompt, version in best_version_per_prompt.items():
             tech = best_version_per_prompt_technique.get(prompt)
             f.write(f"- Prompt {prompt}: Version {version} (technique: {tech})\n")
         f.write("\n## Best Model Per Prompt\n")
-        for prompt, info in best_model_per_prompt.items():
-            f.write(f"- Prompt {prompt}: Model {info['model']} (avg_version_elo={info['avg_version_elo']:.2f})\n")
+        for prompt, info in best_model_per_prompt.items():            f.write(f"- Prompt {prompt}: Model {info['model']} (avg_version_elo={info['avg_version_elo']:.2f})\n")
+    
     print(f"\nResults saved to {json_path} and {md_path}")
+    
+    # Print final correctness summary
+    print("\n" + "="*60)
+    print("CORRECTNESS ANALYSIS SUMMARY")
+    print("="*60)
+    
+    print("\n📊 MODEL ACCURACY RANKING:")
+    model_accuracy_sorted = sorted(model_correctness.items(), 
+                                 key=lambda x: x[1]['correct'] / x[1]['total'] if x[1]['total'] > 0 else 0, 
+                                 reverse=True)
+    for i, (model, stats) in enumerate(model_accuracy_sorted, 1):
+        accuracy = stats['correct'] / stats['total'] if stats['total'] > 0 else 0
+        status = "🟢" if accuracy >= 0.8 else "🟡" if accuracy >= 0.6 else "🔴"
+        print(f"  {i}. {status} {model}: {accuracy:.1%} ({stats['correct']}/{stats['total']})")
+    
+    print("\n📈 TECHNIQUE ACCURACY RANKING:")
+    technique_accuracy_sorted = sorted(technique_correctness.items(), 
+                                     key=lambda x: x[1]['correct'] / x[1]['total'] if x[1]['total'] > 0 else 0, 
+                                     reverse=True)
+    for i, (technique, stats) in enumerate(technique_accuracy_sorted, 1):
+        accuracy = stats['correct'] / stats['total'] if stats['total'] > 0 else 0
+        status = "🟢" if accuracy >= 0.8 else "🟡" if accuracy >= 0.6 else "🔴"
+        print(f"  {i}. {status} {technique}: {accuracy:.1%} ({stats['correct']}/{stats['total']})")
+    
+    # Overall statistics
+    total_correct = sum(stats['correct'] for stats in model_correctness.values())
+    total_evaluated = sum(stats['total'] for stats in model_correctness.values())
+    overall_accuracy = total_correct / total_evaluated if total_evaluated > 0 else 0
+    
+    print(f"\n📋 OVERALL STATISTICS:")
+    print(f"  • Total test runs evaluated: {total_evaluated}")
+    print(f"  • Total correct: {total_correct}")
+    print(f"  • Total incorrect: {total_evaluated - total_correct}")
+    print(f"  • Overall accuracy: {overall_accuracy:.1%}")
+    print("="*60)
+    
     print("\n🎉 Custom ELO analysis completed successfully!")
     sys.exit(0)
 

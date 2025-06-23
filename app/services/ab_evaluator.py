@@ -118,8 +118,7 @@ class ABTestingEvaluator:
         # Compare the outputs
         output1 = test_run1.get("output", "")
         output2 = test_run2.get("output", "")
-        
-        # Construct the comparison prompt
+          # Construct the comparison prompt
         # If comparing within the same version, use prompt version content
         # Otherwise use original prompt content (with fallback to version content)
         if compare_within_version:
@@ -128,6 +127,7 @@ class ABTestingEvaluator:
         else:
             # For across-version comparison, use the original prompt content with fallback
             prompt_text = prompt1.get("content", prompt_version1.get("content", ""))
+        
         expected_solution = (prompt1.get("expected_solution") or 
                            prompt_version1.get("expected_solution") or 
                            "")
@@ -154,9 +154,13 @@ Compare the two responses and determine which one better answers the original pr
 4. Relevance to the prompt
 5. Quality and usefulness of the response
 
+For each response, also evaluate whether it is correct based on the original prompt and expected solution.
+
 Return your evaluation as a JSON object with these keys:
 - "winner": Either "A" or "B" (the better response)
 - "explanation": A detailed explanation of why the chosen response is better
+- "response_a_correct": Boolean (true if Response A is correct/accurate, false otherwise)
+- "response_b_correct": Boolean (true if Response B is correct/accurate, false otherwise)
 
 Only return the JSON object, with no other text.
 """
@@ -173,8 +177,7 @@ Only return the JSON object, with no other text.
                 winner_test_run_id = test_run_id2
             else:
                 raise ValueError(f"Invalid winner value: {winner_key}")
-            
-            # Create comparison result data
+              # Create comparison result data
             comparison_data = {
                 "test_run_id1": test_run_id1,
                 "test_run_id2": test_run_id2,
@@ -182,10 +185,24 @@ Only return the JSON object, with no other text.
                 "explanation": comparison.get("explanation", ""),
                 "compare_within_version": compare_within_version
             }
+              # Extract correctness information
+            response_a_correct = comparison.get("response_a_correct", None)
+            response_b_correct = comparison.get("response_b_correct", None)
             
             # Save to database
             if self.neo4j_service:
                 comparison_result = self.neo4j_service.create_comparison_result(comparison_data)
+                
+                # Update test runs with correctness information
+                if response_a_correct is not None:
+                    self.neo4j_service.update_test_run(test_run_id1, {
+                        "is_correct": response_a_correct
+                    })
+                
+                if response_b_correct is not None:
+                    self.neo4j_service.update_test_run(test_run_id2, {
+                        "is_correct": response_b_correct
+                    })
                 
                 # Update ELO ratings
                 self._update_elo_ratings(test_run_id1, test_run_id2, winner_test_run_id, compare_within_version)
@@ -411,14 +428,23 @@ Only return the JSON object, with no other text.
                 json_content = result.split("```")[1].strip()
                 comparison = json.loads(json_content)
             else:
-                comparison = json.loads(result)
-              # Validate the response structure
+                comparison = json.loads(result)              # Validate the response structure
             winner = comparison.get("winner", "").upper()
             if winner not in ["A", "B"]:
                 raise ValueError(f"Invalid winner value: {winner}. Must be 'A' or 'B'")
             
             if not comparison.get("explanation"):
                 raise ValueError("Missing explanation in comparison result")
+            
+            # Validate correctness fields (they should be present but can be None or boolean)
+            response_a_correct = comparison.get("response_a_correct")
+            response_b_correct = comparison.get("response_b_correct")
+            
+            if response_a_correct is not None and not isinstance(response_a_correct, bool):
+                raise ValueError("response_a_correct must be a boolean or null")
+            
+            if response_b_correct is not None and not isinstance(response_b_correct, bool):
+                raise ValueError("response_b_correct must be a boolean or null")
             
             return comparison
             
@@ -498,12 +524,15 @@ INSTRUCTIONS:
 REQUIRED JSON FORMAT:
 {{
     "winner": "A",
-    "explanation": "Detailed explanation of why this response is better"
+    "explanation": "Detailed explanation of why this response is better",
+    "response_a_correct": true,
+    "response_b_correct": false
 }}
 
 IMPORTANT: 
 - The "winner" field must be exactly "A" or "B" (nothing else)
 - The "explanation" field must contain a detailed justification
+- The "response_a_correct" and "response_b_correct" fields must be boolean (true/false)
 - Return ONLY the JSON object, no other text
 """
     
@@ -559,10 +588,11 @@ Step 4: Analyze Response B
 Step 5: Choose the better response (A or B)
 
 Step 6: Output ONLY this JSON format:
-{{"winner": "A", "explanation": "Your detailed explanation here"}}
+{{"winner": "A", "explanation": "Your detailed explanation here", "response_a_correct": true, "response_b_correct": false}}
 
 Rules:
 - winner must be "A" or "B" only
 - explanation must be detailed
+- response_a_correct and response_b_correct must be boolean
 - No text outside the JSON
 """
