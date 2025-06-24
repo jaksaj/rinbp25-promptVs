@@ -103,12 +103,13 @@ class GraphPromptGenerator:
         """Generate a specific type of question for the graph."""
         graph = self.build_adjacency_list(edges)
         edges_text = "\n".join([f"{from_node} -> {to_node}" for from_node, to_node in edges])
-        
+        manual_instruction = ("IMPORTANT: Do NOT provide code. Instead, provide the exact answer (the list of nodes or result) as requested. Do not show or describe any code.")
+
         if question_type == "bfs":
             start_node = random.choice(nodes)
             depth = random.randint(1, 3)
             solution = self.bfs_at_depth(graph, start_node, depth)
-            
+
             return {
                 "name": f"Graph BFS from {start_node}",
                 "description": "Perform breadth-first search on a directed graph",
@@ -116,15 +117,16 @@ class GraphPromptGenerator:
                           f"For BFS, return only the nodes reached at the specified depth (not the starting node).\n"
                           f"For parents, return only nodes with edges pointing to the given node (not the node itself).\n"
                           f"The graph has the following edges:\n{edges_text}\n"
-                          f"Operation:\nPerform a BFS from node {start_node} with depth {depth}.",
+                          f"Operation:\nPerform a BFS from node {start_node} with depth {depth}.\n"
+                          f"{manual_instruction}",
                 "expected_solution": str(solution),
                 "tags": ["graph", "bfs", "algorithms"]
             }
-        
+
         elif question_type == "parents":
             target_node = random.choice(nodes)
             solution = self.find_parents(edges, target_node)
-            
+
             return {
                 "name": f"Find parents of {target_node}",
                 "description": "Find all parent nodes of a given node",
@@ -132,22 +134,24 @@ class GraphPromptGenerator:
                           f"For BFS, return only the nodes reached at the specified depth (not the starting node).\n"
                           f"For parents, return only nodes with edges pointing to the given node (not the node itself).\n"
                           f"The graph has the following edges:\n{edges_text}\n"
-                          f"Operation:\nFind all parent nodes of {target_node}.",
+                          f"Operation:\nFind all parent nodes of {target_node}.\n"
+                          f"{manual_instruction}",
                 "expected_solution": str(solution),
                 "tags": ["graph", "parents", "algorithms"]
             }
-        
+
         elif question_type == "reachable":
             start_node = random.choice(nodes)
             solution = self.find_reachable_nodes(graph, start_node)
-            
+
             return {
                 "name": f"Reachable nodes from {start_node}",
                 "description": "Find all nodes reachable from a given starting node",
                 "content": f"You will be given a list of directed edges and an operation to perform.\n"
                           f"For reachable, return all nodes that can be reached from the starting node (not the starting node itself).\n"
                           f"The graph has the following edges:\n{edges_text}\n"
-                          f"Operation:\nFind all nodes reachable from {start_node}.",
+                          f"Operation:\nFind all nodes reachable from {start_node}.\n"
+                          f"{manual_instruction}",
                 "expected_solution": str(solution),
                 "tags": ["graph", "reachable", "algorithms"]
             }

@@ -650,6 +650,49 @@ def main():
                 'total': 0,
                 'accuracy': 0
             }
+    # Number of prompt versions where the model's version had highest version elo (by prompt version, not by prompt)
+    version_best_model = {}
+    for version, elo in avg_version_elo_per_version.items():
+        # Find all models for this version (should be only one, but robust)
+        model = version_to_model.get(version)
+        if not model:
+            continue
+        # For this version, compare to all other models' versions for the same prompt version
+        # Actually, each version is unique, so just count the highest elo per version
+        # So, for each version, the model for that version gets a point if its elo is the highest among all models for that version
+        # But since each version is unique to a model, this is just counting all versions
+        # If you want to compare across all versions, you can just count all versions for each model.
+        # If you want to compare for each prompt, which model's version had the highest elo, that's already done above.
+        # Here, we just count the number of prompt versions where the model's version has the highest elo (which is all their versions).
+        version_best_model[model] = version_best_model.get(model, 0) + 1
+    for model in model_comparison:
+        model_comparison[model]['num_prompt_versions_with_highest_elo'] = version_best_model.get(model, 0)
+
+    # 2. Technique comparison (use global elo)
+    technique_comparison = {}
+    for technique, versions in technique_to_versions.items():
+        elos = [avg_global_elo_per_version.get(v, 1000) for v in versions]
+        technique_comparison[technique] = {
+            'avg_elo': sum(elos)/len(elos) if elos else 1000,
+            'num_prompt_versions': len(versions)
+        }
+        
+        # Add correctness metrics
+        if technique in technique_correctness:
+            correctness = technique_correctness[technique]
+            technique_comparison[technique]['correctness'] = {
+                'correct': correctness['correct'],
+                'incorrect': correctness['incorrect'],
+                'total': correctness['total'],
+                'accuracy': correctness['correct'] / correctness['total'] if correctness['total'] > 0 else 0
+            }
+        else:
+            technique_comparison[technique]['correctness'] = {
+                'correct': 0,
+                'incorrect': 0,
+                'total': 0,
+                'accuracy': 0
+            }
     # Number of prompts where a prompt version using the technique had highest global elo
     prompt_best_technique = {}
     for prompt, versions in prompt_to_versions.items():
@@ -702,13 +745,7 @@ def main():
     }    # Print concise summary
     print("\nMODEL COMPARISON:")
     for model, data in model_comparison.items():
-        correctness = data['correctness']
-        print(f"  {model}:")
-        print(f"    - avg_version_elo: {data['avg_elo']:.2f}")
-        print(f"    - #prompt_versions: {data['num_prompt_versions']}")
-        print(f"    - #prompts_with_highest_elo: {data['num_prompts_with_highest_elo']}")
-        print(f"    - correctness: {correctness['correct']}/{correctness['total']} ({correctness['accuracy']:.1%} accurate)")
-    
+        print(f"  {model}: avg_version_elo={data['avg_elo']:.2f}, #prompt_versions={data['num_prompt_versions']}, #prompt_versions_with_highest_elo={data['num_prompt_versions_with_highest_elo']}")
     print("\nTECHNIQUE COMPARISON:")
     for tech, data in technique_comparison.items():
         correctness = data['correctness']
@@ -751,14 +788,8 @@ def main():
         f.write(f"# ELO Custom Analysis ({timestamp})\n\n")
         f.write("## Model Comparison\n")
         for model, data in model_comparison.items():
-            correctness = data['correctness']
-            f.write(f"### {model}\n")
-            f.write(f"- **Average Version ELO**: {data['avg_elo']:.2f}\n")
-            f.write(f"- **Prompt Versions**: {data['num_prompt_versions']}\n")
-            f.write(f"- **Prompts with Highest ELO**: {data['num_prompts_with_highest_elo']}\n")
-            f.write(f"- **Correctness**: {correctness['correct']}/{correctness['total']} ({correctness['accuracy']:.1%} accurate)\n\n")
-        
-        f.write("## Technique Comparison\n")
+            f.write(f"- **{model}**: avg_version_elo={data['avg_elo']:.2f}, #prompt_versions={data['num_prompt_versions']}, #prompt_versions_with_highest_elo={data['num_prompt_versions_with_highest_elo']}\n")
+        f.write("\n## Technique Comparison\n")
         for tech, data in technique_comparison.items():
             correctness = data['correctness']
             f.write(f"### {tech}\n")
@@ -782,7 +813,8 @@ def main():
             tech = best_version_per_prompt_technique.get(prompt)
             f.write(f"- Prompt {prompt}: Version {version} (technique: {tech})\n")
         f.write("\n## Best Model Per Prompt\n")
-        for prompt, info in best_model_per_prompt.items():            f.write(f"- Prompt {prompt}: Model {info['model']} (avg_version_elo={info['avg_version_elo']:.2f})\n")
+        for prompt, info in best_model_per_prompt.items():            
+            f.write(f"- Prompt {prompt}: Model {info['model']} (avg_version_elo={info['avg_version_elo']:.2f})\n")
     
     print(f"\nResults saved to {json_path} and {md_path}")
     
