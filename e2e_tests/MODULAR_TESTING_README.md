@@ -279,7 +279,7 @@ python run_all_scripts.py
 python run_all_scripts.py --include-analysis
 
 # Run with custom settings
-python run_all_scripts.py --runs-per-version 3 --include-analysis --verbose
+python run_all_scripts.py --runs-per-version 5 --include-analysis --verbose
 ```
 
 ### Run Scripts Individually
@@ -294,7 +294,7 @@ python 02_create_test_runs.py --runs-per-version 1 --verbose
 python 03_ab_testing_evaluations.py --verbose
 
 # Step 4: Analyze ELO ratings and generate insights
-python 04_elo_rating_analysis.py --input ../output/evaluation_report_20250623_232222.json --verbose
+python 04_elo_rating_analysis.py --input ../output/evaluation_report_20250624_211746.json --verbose
 ```
 
 ### Restart from a Specific Point

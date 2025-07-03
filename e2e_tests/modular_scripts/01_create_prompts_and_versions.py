@@ -58,7 +58,7 @@ class PromptCreator:
         self.config = self._load_config()
         
         # Model for version creation
-        self.generator_model = "gemma3:4b"
+        self.generator_model = "llama3.1:8b"
         
     def _load_config(self) -> Dict:
         """Load test configuration from JSON file"""
@@ -250,7 +250,7 @@ class PromptCreator:
             logger.info(f"Created prompt '{prompt_config['name']}' with ID: {prompt_id}")
         return self.prompt_ids
     
-    def create_prompt_versions(self, techniques: List[str] = ['control', 'cot_reasoning', 'cot_simple']) -> Dict[str, List[str]]:
+    def create_prompt_versions(self, techniques: List[str] = ['control', 'cot_reasoning', 'cot_simple','role_prompting','few_shot']) -> Dict[str, List[str]]:
         """Create prompt versions using different techniques via batch endpoint and poll for results."""
         logger.info(f"Creating prompt versions using techniques: {techniques} (batch mode)")
         batch_data = {

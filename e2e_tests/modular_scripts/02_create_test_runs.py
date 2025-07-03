@@ -64,7 +64,7 @@ class TestRunCreator:
         self.load_input_data()
         
         # Models for testing (lightweight models for faster execution)
-        self.test_models = ["llama3.2:1b", "gemma3:1b"]
+        self.test_models = ["deepseek-r1:1.5b", "llama3.2:1b"," gemma3:1b"]
         
     def load_input_data(self) -> Dict:
         """Load data from previous script"""
@@ -271,7 +271,7 @@ class TestRunCreator:
 
         # Poll for completion
         poll_url = f"/api/techniques/batch-status/{job_id}"
-        max_wait = 1800  # 30 minutes max
+        max_wait = 7200  # 30 minutes max
         poll_interval = 5
         waited = 0
         while waited < max_wait:

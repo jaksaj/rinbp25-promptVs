@@ -182,7 +182,7 @@ class GraphPromptGenerator:
 
 def main():
     parser = argparse.ArgumentParser(description="Generate graph prompts for testing")
-    parser.add_argument("--graphs", type=int, default=2, help="Number of graphs to generate (default: 2)")
+    parser.add_argument("--graphs", type=int, default=10, help="Number of graphs to generate (default: 2)")
     parser.add_argument("--questions", type=int, default=5, help="Number of questions per graph (default: 3)")
     parser.add_argument("--max-nodes", type=int, default=10, help="Maximum number of nodes per graph (default: 10, max: 26)")
     parser.add_argument("--output", type=str, default="generated_graph_prompts.json", help="Output file name")

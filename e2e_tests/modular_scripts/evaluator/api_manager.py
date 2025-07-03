@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class APIManager:
     """Manages API server, Ollama service, and model operations"""
     
-    def __init__(self, api_base_url: str = "http://localhost:8000", evaluation_model: str = "gemma3:4b"):
+    def __init__(self, api_base_url: str = "http://localhost:8000", evaluation_model: str = "llama3.1:8b"):
         self.api_base_url = api_base_url.rstrip('/')
         self.evaluation_model = evaluation_model
         self.session = requests.Session()

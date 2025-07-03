@@ -20,7 +20,8 @@ DEFAULT_MODELS = [
     "gemma3:1b",
     "llama3.2:1b",
     "gemma3:4b",
-    "llama3.1:8b"
+    "llama3.1:8b",
+    "deepseek-r1:1.5b"
 ]
 
 # Windows-specific paths
